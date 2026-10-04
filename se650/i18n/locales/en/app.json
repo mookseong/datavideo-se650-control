@@ -15,43 +15,47 @@
     "failed": "● Connection failed",
     "lost": "● Connection lost"
   },
-  "bus": {
-    "pgm": "PGM",
-    "pvw": "PVW"
-  },
-  "transition": {
-    "title": "TRANSITION",
-    "auto": "AUTO",
-    "cut": "CUT",
-    "ftb": "FTB",
-    "type": "Type",
-    "frames": "Frames",
-    "apply": "Apply"
-  },
-  "keyer": {
-    "title": "KEYER / DSK",
-    "key1": "KEY 1",
-    "pip": "P-in-P",
-    "dsk1": "DSK 1",
-    "dsk_auto": "DSK AUTO",
-    "dsk_cut": "DSK CUT"
-  },
-  "output": {
-    "title": "OUTPUT · AUDIO · USER MEM",
-    "hdmi": "HDMI OUT",
-    "audio": "AUDIO",
-    "audio_mode": "A.MODE",
-    "user": "USER",
-    "load": "LOAD",
-    "save": "SAVE"
-  },
-  "menu": {
+  "panel": {
+    "model": "SE-650",
+    "subtitle": "DIGITAL VIDEO SWITCHER",
     "menu": "MENU",
-    "up": "UP",
-    "down": "DOWN",
-    "left": "LEFT",
-    "right": "RIGHT",
-    "enter": "ENTER"
+    "enter": "ENTER",
+    "wipe": "WIPE",
+    "rev": "REV",
+    "transition": "TRANSITION",
+    "trans_bg": "TRANS\nBG",
+    "mix": "MIX",
+    "wipe_on": "WIPE",
+    "pip": "PIP",
+    "keyer": "KEYER",
+    "pgm": "PGM",
+    "pvw": "PVW",
+    "user_memory": "USER MEMORY",
+    "reset": "RESET",
+    "user": "USER\n{number}",
+    "logo": "LOGO\nON/OFF",
+    "program": "PROGRAM",
+    "preview": "PREVIEW",
+    "bkg": "BKG",
+    "still": "STILL",
+    "still_2": "STILL 2",
+    "cut": "CUT",
+    "auto": "AUTO",
+    "ftb": "FTB"
+  },
+  "extras": {
+    "title": "EXTRAS (not on the hardware panel)",
+    "frames": "Transition frames",
+    "apply": "Apply",
+    "keyer_source": "KEYER source",
+    "pip_source": "PIP source",
+    "logo_source": "LOGO source",
+    "hdmi": "HDMI out",
+    "audio": "Audio",
+    "audio_mode": "Audio mode",
+    "memory": "User memory",
+    "load": "Load",
+    "save": "Save"
   },
   "choice": {
     "source": {
@@ -60,8 +64,6 @@
       "in_2": "In 2",
       "in_3": "In 3",
       "in_4": "In 4",
-      "still": "Still",
-      "freeze": "Freeze",
       "matte": "Matte",
       "still_1": "Still 1",
       "still_2": "Still 2"
@@ -100,10 +102,11 @@
     "error": "Error: {error}",
     "connect_failed": "Connection failed: {error}",
     "frames_not_number": "Frame count must be a number",
-    "language_changed": "Language: {name}"
+    "language_changed": "Language: {name}",
+    "reset_unsupported": "RESET is a menu key on the hardware panel and can't be pressed over the network."
   },
   "cli": {
-    "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (Black, 1-4, Matte, Still, Freeze or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state",
+    "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (BKG, 1-4, Still 1, Still 2, Black or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state",
     "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | Input names: {names}",
     "no_state": "[warn] No state reply for {seconds} s"
   }

@@ -63,16 +63,20 @@ class GuiTests(unittest.TestCase):
         self.pump_until(lambda: False, seconds)
 
     def lit(self, bus):
+        """켜진 소스 버튼 키 목록 ('bkg', '1'..'4', 'still')"""
         color = theme.PGM if bus == "pgm" else theme.PVW
-        return [s for s, b in self.window.buses.buttons[bus].items() if theme.is_lit(b, color)]
+        return [k for k, b in self.window.device.sources.buttons[bus].items() if theme.is_lit(b, color)]
 
     def keyer_lit(self, keyer, bus):
         color = theme.PGM if bus == "pgm" else theme.PVW
-        return theme.is_lit(self.window.keyers.buttons[(keyer, bus)], color)
+        return theme.is_lit(self.window.device.keyers.buttons[(keyer, bus)], color)
+
+    def group_lit(self, group, key, color):
+        return theme.is_lit(getattr(self.window.device, group).buttons[key], color)
 
     def connect(self):
         self.window.connect()
-        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == [1] and self.lit("pvw") == [2]),
+        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["1"] and self.lit("pvw") == ["2"]),
                         "연결 후 상태 미표시")
 
     def log_text(self):
@@ -82,7 +86,8 @@ class GuiTests(unittest.TestCase):
     def test_state_shown_right_after_connect(self):
         self.connect()
         self.assertEqual(self.window.connection_bar.status_var.get(), tr("app.status.connected", host="127.0.0.1"))
-        self.assertTrue(self.pump_until(lambda: self.window.buses.buttons["pgm"][3].cget("text") == "PC"))
+        self.assertTrue(self.pump_until(lambda: self.window.device.sources.stickers[3].cget("text") == "PC"))
+        self.assertEqual(self.window.device.sources.stickers[3].cget("bg"), theme.STICKER)
 
     def test_state_shown_from_first_realtime_packet(self):
         self.fx.device.push_on_connect = True
@@ -110,8 +115,8 @@ class GuiTests(unittest.TestCase):
         window = MainWindow(root, settings=Settings(self.settings.path))
         try:
             self.assertEqual(window.connection_bar.ip, "10.1.1.1")
-            self.assertEqual(window.transition.duration_var.get(), 7)
-            self.assertEqual(window.outputs.hdmi.value, "PGM")
+            self.assertEqual(window.extras.duration_var.get(), 7)
+            self.assertEqual(window.extras.hdmi.value, "PGM")
         finally:
             window.stop()
             root.destroy()
@@ -120,27 +125,27 @@ class GuiTests(unittest.TestCase):
 
     def test_bus_button(self):
         self.connect()
-        self.window.buses.buttons["pvw"][4].invoke()
-        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == [4]))
+        self.window.device.sources.buttons["pvw"]["4"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == ["4"]))
         self.assertEqual(self.fx.device.state[(2, 87)], 4)
 
     def test_keyer_program_lights_program_only(self):
         self.connect()
-        self.window.keyers.buttons[("key1", "pgm")].invoke()
+        self.window.device.keyers.buttons[("key1", "pgm")].invoke()
         self.assertTrue(self.pump_until(lambda: self.keyer_lit("key1", "pgm")))
         self.pump(0.3)
         self.assertFalse(self.keyer_lit("key1", "pvw"))
 
     def test_keyer_preview_then_cut(self):
         self.connect()
-        self.window.keyers.buttons[("key1", "pvw")].invoke()
+        self.window.device.keyers.buttons[("key1", "pvw")].invoke()
         self.assertTrue(self.pump_until(lambda: self.keyer_lit("key1", "pvw")))
         self.assertFalse(self.keyer_lit("key1", "pgm"))
         self.window.run(lambda sw: sw.cut())
         self.assertTrue(self.pump_until(lambda: self.keyer_lit("key1", "pgm") and self.keyer_lit("key1", "pvw")))
 
     def test_click_before_connect(self):
-        self.window.buses.buttons["pgm"][2].invoke()
+        self.window.device.sources.buttons["pgm"]["2"].invoke()
         self.pump(0.2)
         self.assertIn(tr("app.message.connect_first"), self.log_text())
 
@@ -162,19 +167,19 @@ class GuiTests(unittest.TestCase):
         self.connect()
         self.fx.device.state[(2, 86)] = 3
         self.window.refresh_from_device()
-        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == [3]))
+        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["3"]))
 
     def test_keyboard_shortcuts(self):
         self.connect()
-        self.window._on_key(FakeKeyEvent("3", self.window.transition.auto_button))
-        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == [3]))
-        self.window._on_key(FakeKeyEvent("space", self.window.transition.auto_button))
-        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == [3]))
+        self.window._on_key(FakeKeyEvent("3", self.window.device.cut_auto.auto_button))
+        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == ["3"]))
+        self.window._on_key(FakeKeyEvent("space", self.window.device.cut_auto.auto_button))
+        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["3"]))
 
     def test_invalid_duration(self):
         self.connect()
-        self.window.transition.duration_var.set("abc")
-        self.window.transition.apply_duration()
+        self.window.extras.duration_var.set("abc")
+        self.window.extras.apply_duration()
         self.pump(0.2)
         self.assertIn(tr("app.message.frames_not_number"), self.log_text())
 
@@ -185,7 +190,7 @@ class GuiTests(unittest.TestCase):
     # ---------------------------------------------------------------- 언어
     def test_change_language_keeps_connection_and_state(self):
         self.connect()
-        self.window.keyers.buttons[("key1", "pgm")].invoke()
+        self.window.device.keyers.buttons[("key1", "pgm")].invoke()
         self.assertTrue(self.pump_until(lambda: self.keyer_lit("key1", "pgm")))
         old_log = self.log_text().strip()
 
@@ -193,23 +198,107 @@ class GuiTests(unittest.TestCase):
         self.pump(0.2)
         self.assertEqual(self.window.connection_bar.connect_button.cget("text"), "연결 해제")
         self.assertEqual(self.window.connection_bar.status_var.get(), "● 연결됨 (127.0.0.1)")
-        self.assertEqual(self.window.transition.cget("text"), "트랜지션")
+        self.assertEqual(self.window.extras.cget("text"), "추가 기능 (실제 패널에 없는 기능)")
+        self.assertEqual(self.window.device.transition.cget("text"), "TRANSITION")      # 패널 표기는 영어 유지
         self.assertEqual(self.root.title(), "Datavideo SE-650 DVIP 제어")
-        self.assertEqual(self.lit("pgm"), [1])                        # 버스 상태 유지
+        self.assertEqual(self.lit("pgm"), ["1"])                        # 버스 상태 유지
         self.assertTrue(self.keyer_lit("key1", "pgm"))                 # 키어 상태 유지
         self.assertIn(old_log.splitlines()[0], self.log_text())      # 로그 유지
         self.assertIn("언어: 한국어", self.log_text())
         self.assertEqual(self.settings["language"], "ko")
-        self.window.buses.buttons["pvw"][4].invoke()                   # 다시 만든 버튼도 동작
-        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == [4]))
+        self.window.device.sources.buttons["pvw"]["4"].invoke()                   # 다시 만든 버튼도 동작
+        self.assertTrue(self.pump_until(lambda: self.lit("pvw") == ["4"]))
+
+    # ---------------------------------------------------------------- 실제 패널 버튼
+    def test_bkg_selects_matte(self):
+        self.connect()
+        self.window.device.sources.buttons["pgm"]["bkg"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["bkg"]))
+        self.assertEqual(self.fx.device.state[(2, 86)], 17)
+
+    def test_still_alternates_and_shows_still_2(self):
+        self.connect()
+        still = self.window.device.sources.buttons["pvw"]["still"]
+        still.invoke()
+        self.assertTrue(self.pump_until(lambda: self.fx.device.state[(2, 87)] == 19 and self.lit("pvw") == ["still"]))
+        still.invoke()
+        self.assertTrue(self.pump_until(lambda: self.fx.device.state[(2, 87)] == 20))
+        self.assertTrue(self.pump_until(lambda: still.cget("text") == tr("app.panel.still_2")))
+        self.assertEqual(self.lit("pvw"), ["still"])
+
+    def test_transition_group_lamps(self):
+        self.connect()          # 시뮬레이터 초기값: TRANS BG 켜짐, MIX
+        self.assertTrue(self.group_lit("transition", "trans_bg", theme.TRANSITION_LIT))
+        self.assertTrue(self.group_lit("transition", "mix", theme.TRANSITION_LIT))
+        self.window.device.transition.buttons["wipe"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.group_lit("transition", "wipe", theme.TRANSITION_LIT)))
+        self.assertFalse(self.group_lit("transition", "mix", theme.TRANSITION_LIT))
+        self.window.device.transition.buttons["trans_bg"].invoke()
+        self.assertTrue(self.pump_until(lambda: not self.group_lit("transition", "trans_bg", theme.TRANSITION_LIT)))
+        self.assertEqual(self.fx.device.state[(2, 79)], 0)
+
+    def test_wipe_presets_and_rev(self):
+        self.connect()
+        self.assertTrue(self.group_lit("wipe", "pattern_1", theme.WIPE_LIT))
+        self.window.device.wipe.buttons["pattern_2"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.group_lit("wipe", "pattern_2", theme.WIPE_LIT)))
+        self.assertFalse(self.group_lit("wipe", "pattern_1", theme.WIPE_LIT))
+        self.window.device.wipe.buttons["rev"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.group_lit("wipe", "rev", theme.WIPE_LIT)))
+
+    def test_logo_on_off(self):
+        self.connect()
+        self.window.device.logo.button.invoke()
+        self.assertTrue(self.pump_until(lambda: theme.is_lit(self.window.device.logo.button, theme.LOGO_LIT)))
+        self.assertEqual((self.fx.device.state[(2, 91)], self.fx.device.state[(2, 127)]), (1, 0))
+
+    def test_user_memory_recalls_slot(self):
+        self.connect()
+        self.window.device.memory.buttons["user_2"].invoke()
+        load = bytes.fromhex("01000000 00000800 02000000 01000800 01000000")
+        self.assertTrue(self.pump_until(lambda: load in self.fx.device.commands_received))
+
+    def test_reset_explains_instead_of_sending(self):
+        self.connect()
+        before = len(self.fx.device.commands_received)
+        self.window.device.memory.buttons["reset"].invoke()
+        self.pump(0.2)
+        self.assertIn(tr("app.message.reset_unsupported"), self.log_text())
+        self.assertEqual(len(self.fx.device.commands_received), before)
+
+    def test_menu_pad(self):
+        self.connect()
+        self.window.device.menu.buttons["down"].invoke()
+        self.window.device.menu.buttons["enter"].invoke()
+        self.assertTrue(self.pump_until(lambda: self.fx.device.menu_keys == [3, 6]))
+
+    def test_tbar_full_travel_completes_transition(self):
+        self.connect()
+        tbar = self.window.device.tbar
+        for position in (20, 60, 100):
+            tbar._on_move(str(position))
+            time.sleep(tbar.SEND_INTERVAL)
+        tbar._on_release(None)
+        self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["2"] and self.lit("pvw") == ["1"]))
+        self.assertEqual(self.fx.device.wipe_levels[-1], 100.0)
+        self.assertEqual(self.window.switcher.tbar.origin, 100)         # 다음 트랜지션은 위 -> 아래
+
+    def test_tbar_without_connection_logs_once_per_drag(self):
+        tbar = self.window.device.tbar
+        for position in (10, 30, 50):
+            tbar._on_move(str(position))
+            time.sleep(tbar.SEND_INTERVAL)
+        tbar._on_release(None)
+        self.pump(0.2)
+        self.assertEqual(self.log_text().count(tr("app.message.connect_first")), 1)
 
     def test_choice_labels_translated_but_values_language_independent(self):
         self.window.connection_bar.language.select("ko")
         self.pump(0.1)
-        self.assertEqual(self.window.outputs.audio_mode.get(), "디지털")      # 표시
-        self.window.outputs.audio_mode.select("Analog")
+        self.assertEqual(self.window.extras.audio_mode.get(), "디지털")      # 표시
+        self.window.extras.audio_mode.select("Analog")
         self.assertEqual(self.settings["audio_mode"], "Analog")              # 저장값은 ID
-        self.assertEqual(self.window.outputs.audio_mode.get(), "아날로그")
+        self.assertEqual(self.window.extras.audio_mode.get(), "아날로그")
 
     def test_language_restored_from_settings(self):
         self.settings.set("language", "ko")

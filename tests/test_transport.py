@@ -116,6 +116,13 @@ class ConnectionTests(unittest.TestCase):
         time.sleep(0.3)
         self.assertTrue(all(p == b"\x00\x00\x00\x00" for p in self.fx.device.realtime_replies))
 
+    def test_command_null_answered_exactly_once(self):
+        """명령 채널: 접속 인사 null 1 + 장비 null 에 대한 답장 1. 그 이상이면 핑퐁 버그."""
+        self.open()
+        self.assertTrue(wait_for(lambda: self.fx.device.command_nulls >= 2))
+        time.sleep(0.3)
+        self.assertEqual(self.fx.device.command_nulls, 2)
+
     def test_send_command_reaches_command_port(self):
         self.open()
         self.conn.send_command(struct.pack("<II", 0x15, 3))

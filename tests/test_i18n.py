@@ -21,10 +21,8 @@ LAYER_FILES = {"transport", "protocol", "control", "app"}
 
 # 방송 장비에서 영어가 표준인 용어: 어느 언어팩이든 영어 원문과 같아야 한다 (README "번역하지 않는 용어")
 TERMINOLOGY_PREFIXES = (
-    "app.bus.",                          # PGM, PVW
-    "app.transition.auto", "app.transition.cut", "app.transition.ftb",
-    "app.keyer.key1", "app.keyer.pip", "app.keyer.dsk1", "app.keyer.dsk_auto", "app.keyer.dsk_cut",
-    "app.choice.source.",                # Black, In 1~4, Still, Freeze, Matte, Still 1/2
+    "app.panel.",                        # 실제 패널에 인쇄된 표기: PGM, PVW, MIX, TRANS BG, USER, LOGO, CUT, AUTO ...
+    "app.choice.source.",                # Black, In 1~4, Matte, Still 1/2
     "app.choice.transition_type.",       # Mix, Wipe
     "app.choice.hdmi_out.",              # PGM, PVW, PGM+DSK, PVW+DSK, MultiView
     "app.choice.audio_source.in_",       # In 1~4

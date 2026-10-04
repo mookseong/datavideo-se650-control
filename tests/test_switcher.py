@@ -68,6 +68,46 @@ class SwitcherUnitTests(unittest.TestCase):
         self.switcher.set_audio_mode("Analog")
         self.assertEqual(self.last(), bytes.fromhex("01000000 02000600 02000000"))
 
+    # --- 패널 버튼
+    def test_still_alternates_still_1_and_2(self):
+        self.switcher.press_still("pgm")
+        self.assertEqual(self.last(), bytes.fromhex("01000000 56000200 13000000"))       # Still 1 (19)
+        self.conn.receive_realtime(values_packet((Controls.PGM_SRC, 19)))
+        self.switcher.press_still("pgm")
+        self.assertEqual(self.last(), bytes.fromhex("01000000 56000200 14000000"))       # Still 2 (20)
+        self.conn.receive_realtime(values_packet((Controls.PST_SRC, 20)))
+        self.switcher.press_still("pvw")
+        self.assertEqual(self.last(), bytes.fromhex("01000000 57000200 13000000"))
+
+    def test_bkg_alias_is_matte(self):
+        self.switcher.set_program("BKG")
+        self.assertEqual(self.last()[-4:], struct.pack("<i", 17))
+
+    def test_trans_bg_and_reverse_toggle(self):
+        self.switcher.toggle_transition_background()
+        self.assertEqual(self.last(), bytes.fromhex("01000000 4f000200 01000000"))
+        self.conn.receive_realtime(values_packet((Controls.TRANS_BGND, 1), (Controls.TRANS_REVERSE, 1)))
+        self.switcher.toggle_transition_background()
+        self.assertEqual(self.last()[-4:], b"\x00\x00\x00\x00")
+        self.switcher.toggle_wipe_reverse()
+        self.assertEqual(self.last(), bytes.fromhex("01000000 54000200 00000000"))
+
+    def test_wipe_preset(self):
+        self.switcher.select_wipe_pattern(2)
+        self.assertEqual(self.last(), bytes.fromhex("01000000 00000200 02000000"))
+
+    def test_logo_on_off_sets_pgm_and_pvw(self):
+        self.switcher.toggle_logo()
+        self.assertEqual(self.last(), bytes.fromhex("01000000 5b000200 01000000 7f000200 00000000"))
+        logo = self.switcher.state.keyers["dsk1"]
+        self.assertEqual((logo.on, logo.preview), (True, True))
+        self.switcher.toggle_logo()
+        self.assertEqual(self.last()[4:12], bytes.fromhex("5b000200 00000000"))
+
+    def test_tbar_sends_wipe_level(self):
+        self.assertEqual(self.switcher.move_tbar(50), 50)
+        self.assertEqual(self.last(), bytes.fromhex("01000000 01000200 00004842"))
+
     def test_send_when_disconnected_raises(self):
         self.conn.close()
         with self.assertRaises(ConnectionError):

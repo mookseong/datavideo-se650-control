@@ -16,6 +16,7 @@ RESULT_INPUT_NAME = 3
 
 PGM, PST = (2, 86), (2, 87)
 ME_COMMAND = (7, 0)
+WIPE_LEVEL = (2, 1)            # float
 KEYERS = (((2, 19), (2, 80)), ((2, 49), (2, 81)), ((2, 91), (2, 127)))   # (ON, 다음 트랜지션 포함)
 TRANSITION_RUN, TRANSITION_GOTO_END = 1, 5
 
@@ -46,6 +47,7 @@ def initial_state():
     """(section, control) -> value"""
     return {
         PGM: 1, PST: 2, (2, 88): 0, (2, 133): 0,
+        (2, 0): 1, (2, 79): 1, (2, 84): 0,            # 와이프 패턴, TRANS BG, REV
         (2, 19): 0, (2, 80): 0, (2, 49): 0, (2, 81): 0, (2, 91): 0, (2, 127): 0,
         (7, 2): 0, (7, 7): 0, (7, 12): 0, (7, 3): 30, (7, 8): 30, (7, 13): 30,
     }
@@ -66,7 +68,9 @@ class FakeSE650:
         self.ignore_gets = 0                 # 처음 n 번의 GET 에 응답하지 않음
         self.commands_received = []          # 명령 포트로 받은 payload
         self.realtime_replies = []           # 실시간 포트로 받은 payload (전부 null 이어야 정상)
+        self.command_nulls = 0               # 명령 포트로 받은 null (접속 인사 1 + 장비가 보낸 null 에 대한 답장)
         self.menu_keys = []
+        self.wipe_levels = []                # 받은 T-바 진행률
 
         self._realtime_conn = None
         self._push_lock = threading.Lock()
@@ -143,13 +147,18 @@ class FakeSE650:
     def _serve_command(self, conn):
         handlers = {CMD_SET: self._on_set, CMD_GET: self._on_get,
                     CMD_INPUT_NAME: self._on_input_name, CMD_MENU: self._on_menu}
+        try:
+            conn.sendall(frame(struct.pack("<I", CMD_SET)))   # 장비 쪽 null 한 번 -> 컨트롤러가 한 번 되돌려야 함
+        except OSError:
+            return
         for payload in read_payloads(conn):
+            if len(payload) == 4:                    # null: 기록만 하고 되돌리지 않는다 (서로 되돌리면 무한 핑퐁)
+                self.command_nulls += 1
+                continue
             self.commands_received.append(payload)
             command = struct.unpack_from("<I", payload)[0]
             try:
-                if len(payload) == 4:
-                    conn.sendall(frame(payload))     # null echo
-                elif command in handlers:
+                if command in handlers:
                     handlers[command](conn, payload)
             except OSError:
                 break                                # stop() 중 소켓이 닫힘
@@ -160,6 +169,11 @@ class FakeSE650:
         changed = []
         for offset in range(4, len(payload) - 7, 8):
             control, section, value = struct.unpack_from("<HHi", payload, offset)
+            if (section, control) == WIPE_LEVEL:                  # T-바: 100 에 닿으면 완료 후 0 으로
+                self.wipe_levels.append(struct.unpack_from("<f", payload, offset + 4)[0])
+                if self.wipe_levels[-1] >= 100.0:
+                    changed += self._complete_transition()
+                continue
             self.state[(section, control)] = value
             changed.append((section, control))
             if (section, control) == ME_COMMAND and value in (TRANSITION_RUN, TRANSITION_GOTO_END):

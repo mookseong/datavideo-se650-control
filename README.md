@@ -73,7 +73,10 @@ app ──> control ──> protocol
 - `protocol/codec.py` — `encode_set/get`, `decode_realtime`, `decode_command_reply`
 - `control/state.py` — `SwitcherState`, `KeyerState`(키어 규칙), 컨트롤 -> 필드 바인딩 표
 - `control/switcher.py` — `Switcher`: 조작 메서드, 수신 반영, 입력 이름, 초기 상태 동기화
-- `app/gui/panels.py` — `ConnectionBar`, `BusPanel`, `TransitionPanel`, `KeyerPanel`, `OutputPanel`
+- `app/gui/device_panel.py` — 실제 SE-650 패널 배열 (`MenuPad`, `WipeGroup`, `TransitionGroup`, `UserMemoryGroup`,
+  `PipKeyerGroup`, `LogoButton`, `SourceRows`, `TBar`, `CutAuto`)
+- `app/gui/panels.py` — `ConnectionBar`, `ExtrasPanel`(실제 패널에 없는 기능)
+- `control/tbar.py` — T-바 위치 -> 트랜지션 진행률 (끝까지 밀면 다음엔 반대 방향)
 - `app/gui/window.py` — `MainWindow`: 패널 조립, 스레드 -> GUI 이벤트 큐, 연결 수명
 
 ## 기능 추가 예시
@@ -87,6 +90,36 @@ app ──> control ──> protocol
 3. `control/switcher.py` 에 `set_wipe_pattern(n)` 메서드 추가
 4. 필요하면 `app/gui/panels.py` 에 위젯 추가
 5. 테스트: `test_protocol.py`(바이트), `test_state.py`(반영), `test_switcher.py`(조작)
+
+## GUI: 실제 패널 배열
+
+GUI 는 실제 SE-650 패널과 같은 배열입니다. 패널 버튼 동작은 Datavideo 사용자 매뉴얼(SE-650 E7) 기준입니다.
+
+| 패널 버튼 | 동작 | 프로토콜 |
+|---|---|---|
+| PROGRAM / PREVIEW 1~4 | 소스 선택 | PGM_SRC / PST_SRC = 1~4 |
+| BKG | 매트 배경 | 소스 17 (Matte) |
+| STILL | 누를 때마다 Still 1 ↔ Still 2 (2 일 때 `STILL 2` 표시) | 소스 19 / 20 |
+| CUT / AUTO | 컷 / 자동 트랜지션 (진행 중 AUTO 점등) | ME_TRANS_COMMAND 5 / 1 |
+| T-바 | 수동 트랜지션. 끝까지 밀면 완료, 다음엔 반대 방향 | WIPE_LEVEL (float 0~100) |
+| WIPE 프리셋 2개 | 와이프 패턴 1 / 2 | WIPE_PATTERN_NUM |
+| REV | 와이프 방향 반전 | TRANS_REVERSE |
+| TRANS BG | 배경 트랜지션 포함 | TRANS_BGND |
+| MIX / WIPE | 트랜지션 타입 (둘 다 점등 = Clip, 장비에서 설정한 경우 표시만) | TRANS_TYPE 0 / 1 (/ 2) |
+| PIP · KEYER PGM / PVW | 키어 (PVW 표시 = ON XOR 다음 트랜지션 포함) | KEY2 / KEY1 ON, TRANS_KEY* |
+| LOGO ON/OFF | 로고를 PGM·PVW 에 켜고 끔 | DSK1_KEYER_ON (+ DSK1_TRANS 0) |
+| USER 1~3 | 유저 메모리 불러오기 | MEMORY_SELECT + LOAD |
+| MENU / ▲▼◀▶ / ENTER | 장비 메뉴 조작 | 메뉴 키 명령 |
+| RESET | 네트워크 미지원 → 누르면 안내 메시지 | (원격 키 코드 없음) |
+
+장비가 알려주는 입력 이름은 PREVIEW 줄 아래 노란 스티커로 표시됩니다.
+FTB, 트랜지션 프레임, 키어 소스, HDMI 출력, 오디오, 메모리 0~999 저장처럼 **실제 패널에 없는 기능**은
+아래 "추가 기능" 영역에 따로 모았습니다.
+
+**실제 장비 확인이 필요한 부분** (문서끼리 다르거나 문서에 없는 부분):
+- 소스 20: 프로토콜 문서는 "Freeze", 사용자 매뉴얼·키어 소스 표는 "Still 2". 매뉴얼을 따랐습니다.
+- T-바: 문서상 WIPE_LEVEL 이 100 이 되면 장비가 완료 처리. 드래그 중 40ms 간격으로 전송합니다.
+- LOGO ON/OFF: 매뉴얼의 "PGM 과 PVW 에 함께 표시"를 DSK1 ON + 다음 트랜지션 미포함으로 구현했습니다.
 
 ## 동작 메모
 

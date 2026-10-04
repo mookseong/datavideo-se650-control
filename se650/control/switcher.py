@@ -11,13 +11,17 @@ from typing import Callable, Iterable, List, Protocol, Tuple
 from ..i18n import LocalizedError, tr
 from ..protocol import codec
 from ..protocol.constants import (AUDIO_MODES, AUDIO_SOURCES, HDMI_OUTPUTS, KEY_SOURCES, KEYERS,
-                                  MENU_KEYS, SOURCES, TRANSITION_TYPES, ControlId, Controls,
-                                  MemoryCommand, TransitionCommand, lookup)
+                                  MENU_KEYS, SOURCE_ALIASES, SOURCE_STILL_1, SOURCE_STILL_2, SOURCES,
+                                  TRANSITION_TYPES, ControlId, Controls, MemoryCommand, TransitionCommand,
+                                  lookup)
 from .state import BUS_CONTROLS, STATE_CONTROLS, KeyerState, SwitcherState, TransitionEngine
+from .tbar import TBarTracker
 
 log = logging.getLogger(__name__)
 
 INPUT_COUNT = 4
+_SOURCE_NAMES_AND_ALIASES = {**SOURCES, **SOURCE_ALIASES}
+_BUS_CONTROLS = {"pgm": Controls.PGM_SRC, "pvw": Controls.PST_SRC}
 _ENGINES = {
     "me": (Controls.ME_COMMAND, Controls.ME_DURATION),
     "dsk": (Controls.DSK_COMMAND, Controls.DSK_DURATION),
@@ -53,6 +57,7 @@ class Switcher:
         self._pending_names = deque()     # 이름 응답에는 입력 번호가 없어서 요청 순서로 매칭
         self._ready = threading.Event()   # PGM/PVW 값을 받으면 set
         self._stopped = threading.Event()
+        self.tbar = TBarTracker()
 
     # ------------------------------------------------------------ 연결
     @property
@@ -91,10 +96,16 @@ class Switcher:
 
     # ------------------------------------------------------------ 버스
     def set_program(self, source):
-        self._set([(Controls.PGM_SRC, lookup(SOURCES, source))])
+        self._set([(Controls.PGM_SRC, lookup(_SOURCE_NAMES_AND_ALIASES, source))])
 
     def set_preview(self, source):
-        self._set([(Controls.PST_SRC, lookup(SOURCES, source))])
+        self._set([(Controls.PST_SRC, lookup(_SOURCE_NAMES_AND_ALIASES, source))])
+
+    def press_still(self, bus: str):
+        """패널 STILL 버튼: 누를 때마다 Still 1 <-> Still 2 (사용자 매뉴얼)."""
+        current = getattr(self.state, _bus_attribute(bus))
+        target = SOURCE_STILL_2 if current == SOURCE_STILL_1 else SOURCE_STILL_1
+        self._set([(_BUS_CONTROLS[bus], target)])
 
     # ------------------------------------------------------------ 트랜지션
     def auto(self):
@@ -118,6 +129,21 @@ class Switcher:
     def set_transition_type(self, name: str):
         self._set([(Controls.TRANS_TYPE, lookup(TRANSITION_TYPES, name))])
 
+    def toggle_transition_background(self):
+        self._set([(Controls.TRANS_BGND, not self.state.transition_background)])
+
+    def select_wipe_pattern(self, pattern: int):
+        self._set([(Controls.WIPE_PATTERN, int(pattern))])
+
+    def toggle_wipe_reverse(self):
+        self._set([(Controls.TRANS_REVERSE, not self.state.wipe_reverse)])
+
+    def move_tbar(self, position: float) -> float:
+        """T-바 위치(0=아래 ~ 100=위)를 진행률로 바꿔 보낸다. 보낸 진행률을 돌려준다."""
+        level = self.tbar.level_for(position)
+        self._set([(Controls.WIPE_LEVEL, level)])
+        return level
+
     def set_duration(self, frames: int, engine: str = "me"):
         _, duration_control = _ENGINES[engine]
         self._set([(duration_control, int(frames))])
@@ -136,6 +162,13 @@ class Switcher:
         else:
             raise InvalidBusError(bus)
         self._apply_local_keyer(keyer, new, bus)
+
+    def toggle_logo(self):
+        """패널 LOGO ON/OFF: 로고(DSK1)를 PGM 과 PVW 에 함께 켜고 끈다 (사용자 매뉴얼)."""
+        controls = KEYERS["dsk1"]
+        new = KeyerState(on=not self.state.keyers["dsk1"].on, in_next_transition=False)
+        self._set([(controls.on, new.on), (controls.in_next_transition, False)])
+        self._apply_local_keyer("dsk1", new, "logo")
 
     def set_keyer_source(self, keyer: str, source):
         self._set([(KEYERS[keyer].source, lookup(KEY_SOURCES, source))])
@@ -228,6 +261,12 @@ class Switcher:
                 self.request_state()
             except OSError:
                 return
+
+
+def _bus_attribute(bus: str) -> str:
+    if bus not in _BUS_CONTROLS:
+        raise InvalidBusError(bus)
+    return bus
 
 
 def _keyer_fields(name: str, keyer: KeyerState) -> dict:

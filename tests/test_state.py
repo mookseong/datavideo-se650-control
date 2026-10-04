@@ -3,6 +3,7 @@ import itertools
 import unittest
 
 from se650.control.state import STATE_CONTROLS, KeyerState, SwitcherState
+from se650.control.tbar import TBarTracker
 from se650.protocol.codec import ControlValue
 from se650.protocol.constants import Controls
 
@@ -70,6 +71,13 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(self.state.me.duration, 25)
         self.assertFalse(self.state.ftb.running)
 
+    def test_panel_transition_settings(self):
+        self.state.apply(ControlValue(Controls.TRANS_BGND, 1))
+        self.state.apply(ControlValue(Controls.WIPE_PATTERN, 2))
+        self.state.apply(ControlValue(Controls.TRANS_REVERSE, 1))
+        self.assertEqual((self.state.transition_background, self.state.wipe_pattern, self.state.wipe_reverse),
+                         (True, 2, True))
+
     def test_subsection_ignored(self):
         self.assertFalse(self.state.apply(ControlValue(Controls.PGM_SRC, 4, subsection=1)))
         self.assertIsNone(self.state.pgm)
@@ -81,6 +89,28 @@ class ApplyTests(unittest.TestCase):
         for control in (Controls.PGM_SRC, Controls.PST_SRC, Controls.KEY1_ON, Controls.TRANS_PIP,
                         Controls.DSK1_TRANS, Controls.ME_DURATION, Controls.FTB_STATE):
             self.assertIn(control, STATE_CONTROLS)
+
+
+class TBarTests(unittest.TestCase):
+    def test_bottom_to_top_then_top_to_bottom(self):
+        tbar = TBarTracker()
+        self.assertEqual(tbar.level_for(30), 30)
+        self.assertEqual(tbar.level_for(100), 100)       # 완료 -> 출발점이 위로
+        self.assertEqual(tbar.level_for(100), 0)         # 그 자리에서는 다음 트랜지션 0%
+        self.assertEqual(tbar.level_for(25), 75)         # 위에서 아래로 75% 내려옴
+        self.assertEqual(tbar.level_for(0), 100)
+        self.assertEqual(tbar.origin, 0)
+
+    def test_partial_move_back_and_forth(self):
+        tbar = TBarTracker()
+        tbar.level_for(60)
+        self.assertEqual(tbar.level_for(20), 20)         # 중간에서 되돌려도 출발점 유지
+        self.assertEqual(tbar.origin, 0)
+
+    def test_position_clamped(self):
+        tbar = TBarTracker()
+        self.assertEqual(tbar.level_for(-5), 0)
+        self.assertEqual(tbar.level_for(140), 100)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,9 @@ class SwitcherState:
     pgm: Optional[int] = None
     pvw: Optional[int] = None
     transition_type: Optional[int] = None
+    transition_background: bool = False      # 패널 TRANS BG
+    wipe_pattern: Optional[int] = None
+    wipe_reverse: bool = False               # 패널 REV
     ftb_enabled: bool = False
     keyers: Dict[str, KeyerState] = field(default_factory=_new_keyers)
     me: TransitionEngine = field(default_factory=TransitionEngine)
@@ -76,6 +79,9 @@ _BINDINGS = {
     Controls.PGM_SRC: (("pgm",), int),
     Controls.PST_SRC: (("pvw",), int),
     Controls.TRANS_TYPE: (("transition_type",), int),
+    Controls.TRANS_BGND: (("transition_background",), bool),
+    Controls.WIPE_PATTERN: (("wipe_pattern",), int),
+    Controls.TRANS_REVERSE: (("wipe_reverse",), bool),
     Controls.FTB_ENABLE: (("ftb_enabled",), bool),
     Controls.ME_STATE: (("me", "status"), int),
     Controls.ME_DURATION: (("me", "duration"), int),

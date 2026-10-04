@@ -7,19 +7,20 @@ import struct
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple, Union
 
-from .constants import (FLAG_CONTROLS, REALTIME_VARIANT_ID, RESULT_INPUT_NAME, Command, ControlId,
-                        Section)
+from .constants import (FLAG_CONTROLS, FLOAT_CONTROLS, REALTIME_VARIANT_ID, RESULT_INPUT_NAME, Command,
+                        ControlId, Section)
 
 _COMMAND = struct.Struct("<I")
 _PARAM_ID = struct.Struct("<HH")         # control, section
-_PARAM_VALUE = struct.Struct("<HHi")     # control, section, value
+_PARAM_VALUE = struct.Struct("<HHi")     # control, section, value(int)
+_PARAM_FLOAT = struct.Struct("<HHf")     # control, section, value(float)
 _CONTROL_VALUE_COMMANDS = {Command.GET_CONTROL, Command.SET_CONTROL, REALTIME_VARIANT_ID}
 
 
 @dataclass(frozen=True)
 class ControlValue:
     control: ControlId
-    value: int
+    value: Union[int, float]
     subsection: int = 0      # SECTION_SWITCHER 의 상위 바이트. 0 = 메인 M/E
 
 
@@ -32,9 +33,14 @@ DecodedReply = Union[List[ControlValue], InputName, None]
 
 
 # ---------------------------------------------------------------- encode
-def encode_set(items: Iterable[Tuple[ControlId, int]]) -> bytes:
-    body = b"".join(_PARAM_VALUE.pack(c.number, c.section, int(v)) for c, v in items)
-    return _COMMAND.pack(Command.SET_CONTROL) + body
+def encode_set(items: Iterable[Tuple[ControlId, Union[int, float]]]) -> bytes:
+    return _COMMAND.pack(Command.SET_CONTROL) + b"".join(_encode_value(c, v) for c, v in items)
+
+
+def _encode_value(control: ControlId, value) -> bytes:
+    if control in FLOAT_CONTROLS:
+        return _PARAM_FLOAT.pack(control.number, control.section, float(value))
+    return _PARAM_VALUE.pack(control.number, control.section, int(value))
 
 
 def encode_get(controls: Iterable[ControlId]) -> bytes:
@@ -80,6 +86,8 @@ def _decode_parameters(payload: bytes) -> List[ControlValue]:
         control = ControlId(section, number)
         if control in FLAG_CONTROLS:
             value = payload[offset + 4]              # flag 는 하위 1바이트만 유효
+        elif control in FLOAT_CONTROLS:
+            value = _PARAM_FLOAT.unpack_from(payload, offset)[2]
         values.append(ControlValue(control, value, subsection))
     return values
 

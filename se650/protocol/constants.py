@@ -37,12 +37,16 @@ class ControlId:
 
 class Controls:
     # --- SECTION_SWITCHER (4.1.3) ---
+    WIPE_PATTERN = ControlId(Section.SWITCHER, 0)         # int 1~32 (4.1.3.1.1)
+    WIPE_LEVEL = ControlId(Section.SWITCHER, 1)           # float 0~100 = T-바. 100 이면 장비가 0 으로 되돌리며 완료
     KEY1_ON = ControlId(Section.SWITCHER, 19)             # flag, "Key 1 onto the PGM"
     KEY1_SRC = ControlId(Section.SWITCHER, 20)
     PIP_ON = ControlId(Section.SWITCHER, 49)              # KEY2 = PIP (4.1.3.3)
     PIP_SRC = ControlId(Section.SWITCHER, 50)
+    TRANS_BGND = ControlId(Section.SWITCHER, 79)          # flag, 패널 TRANS BG
     TRANS_KEY1 = ControlId(Section.SWITCHER, 80)          # flag, "Keyer 1 included in next transition"
     TRANS_PIP = ControlId(Section.SWITCHER, 81)           # flag
+    TRANS_REVERSE = ControlId(Section.SWITCHER, 84)       # flag, 패널 REV (와이프 방향 반전)
     PGM_SRC = ControlId(Section.SWITCHER, 86)
     PST_SRC = ControlId(Section.SWITCHER, 87)
     TRANS_TYPE = ControlId(Section.SWITCHER, 88)
@@ -89,9 +93,18 @@ KEYERS = {
 
 # 문서상 type 이 flag 인 컨트롤: 값은 하위 1바이트만 유효
 FLAG_CONTROLS = frozenset({
-    Controls.KEY1_ON, Controls.TRANS_KEY1, Controls.TRANS_PIP,
+    Controls.KEY1_ON, Controls.TRANS_KEY1, Controls.TRANS_PIP, Controls.TRANS_BGND, Controls.TRANS_REVERSE,
     Controls.DSK1_ON, Controls.DSK1_TRANS, Controls.FTB_ENABLE,
 })
+
+# 문서상 type 이 float 인 컨트롤: 값 4byte 를 IEEE 754 float 로 주고받는다
+FLOAT_CONTROLS = frozenset({Controls.WIPE_LEVEL})
+
+
+class TransitionType(IntEnum):                # (4.1.3.4.10) + 사용자 매뉴얼 "MIX/WIPE 동시 = Clip"
+    MIX = 0
+    WIPE = 1
+    CLIP = 2
 
 
 class TransitionCommand(IntEnum):             # (4.1.8.1)
@@ -113,9 +126,19 @@ class MemoryCommand(IntEnum):                 # (4.1.9.2)
     STORE = 2
 
 
+# --- 소스 번호 ---
+# 사용자 매뉴얼: 패널 BKG = Matte, STILL 버튼은 누를 때마다 Still 1 <-> Still 2.
+# 프로토콜 문서는 20 을 "Freeze" 로 적었지만 키어 소스 표(4.1.3.2.2)와 매뉴얼은 Still 2 로 쓴다.
+SOURCE_BLACK = 0
+SOURCE_MATTE = 17
+SOURCE_STILL_1 = 19
+SOURCE_STILL_2 = 20
+STILL_SOURCES = (SOURCE_STILL_1, SOURCE_STILL_2)
+
 # --- 이름 -> 값 표 (GUI 표시 순서 유지) ---
-SOURCES = {"Black": 0, "In 1": 1, "In 2": 2, "In 3": 3, "In 4": 4,     # (4.1.3.4.8)
-           "Still": 19, "Freeze": 20, "Matte": 17}
+SOURCES = {"Black": SOURCE_BLACK, "In 1": 1, "In 2": 2, "In 3": 3, "In 4": 4,     # (4.1.3.4.8)
+           "Matte": SOURCE_MATTE, "Still 1": SOURCE_STILL_1, "Still 2": SOURCE_STILL_2}
+SOURCE_ALIASES = {"BKG": SOURCE_MATTE, "Still": SOURCE_STILL_1, "Freeze": SOURCE_STILL_2}   # CLI 호환
 KEY_SOURCES = {"Black": 0, "In 1": 1, "In 2": 2, "In 3": 3, "In 4": 4,  # (4.1.3.2.2)
                "Matte": 17, "Still 1": 19, "Still 2": 20}
 TRANSITION_TYPES = {"Mix": 0, "Wipe": 1}                                # (4.1.3.4.10)
@@ -125,6 +148,7 @@ AUDIO_MODES = {"Off": 0, "Digital": 1, "Analog": 2}                             
 MENU_KEYS = {"MENU": 1, "UP": 2, "DOWN": 3, "LEFT": 4, "RIGHT": 5, "ENTER": 6}
 
 SOURCE_NAMES = {value: name for name, value in SOURCES.items()}
+WIPE_PRESETS = (1, 2)              # 패널의 와이프 프리셋 버튼 2개 = 패턴 1, 2 (매뉴얼 "Transition Effects")
 
 
 class UnknownChoiceError(LocalizedError, ValueError):

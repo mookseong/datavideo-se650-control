@@ -11,7 +11,8 @@ from ...i18n import available_languages, set_locale, tr
 from ...protocol.constants import SOURCE_NAMES
 from ..settings import Settings
 from . import theme
-from .panels import BusPanel, ConnectionBar, KeyerPanel, OutputPanel, TransitionPanel
+from .device_panel import DevicePanel
+from .panels import ConnectionBar, ExtrasPanel
 
 log = logging.getLogger("se650.app")
 
@@ -75,22 +76,15 @@ class MainWindow:
         self.connection_bar = ConnectionBar(self.root, self.settings, self.toggle_connection,
                                             self.refresh_from_device, self.change_language)
         self.connection_bar.grid(row=0, column=0, sticky="ew")
-        self.buses = BusPanel(self.root, self.run)
-        self.buses.grid(row=1, column=0, sticky="ew")
-
-        middle = tk.Frame(self.root, bg=theme.BACKGROUND, padx=10, pady=0)
-        middle.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-        self.transition = TransitionPanel(middle, self.run, self.settings, self.log)
-        self.transition.grid(row=0, column=0, sticky="nsw", padx=(0, 6))
-        self.keyers = KeyerPanel(middle, self.run)
-        self.keyers.grid(row=0, column=1, sticky="nsw", padx=6)
-        self.outputs = OutputPanel(middle, self.run, self.settings)
-        self.outputs.grid(row=0, column=2, sticky="nsw", padx=(6, 0))
+        self.device = DevicePanel(self.root, self.run, self.log)
+        self.device.grid(row=1, column=0, sticky="ew", padx=10)
+        self.extras = ExtrasPanel(self.root, self.run, self.settings, self.log)
+        self.extras.grid(row=2, column=0, sticky="ew", padx=10, pady=(8, 6))
 
         self.log_box = scrolledtext.ScrolledText(self.root, height=7, bg=theme.LOG_BACKGROUND, fg=theme.LOG_TEXT,
                                                  font=theme.FONT_LOG, state="disabled", relief="flat")
         self.log_box.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 10))
-        self._panels = (self.buses, self.transition, self.keyers, self.outputs)
+        self._panels = (self.device, self.extras)
 
     def _rebuild(self):
         """언어 변경: 위젯을 새 언어로 다시 만든다. 연결/로그/상태는 유지."""
@@ -104,15 +98,17 @@ class MainWindow:
         self._refresh_panels()
 
     # ------------------------------------------------------------ 조작
-    def run(self, action):
-        """패널 버튼 공통 진입점: 연결 확인 + 예외를 로그로."""
+    def run(self, action) -> bool:
+        """패널 버튼 공통 진입점: 연결 확인 + 예외를 로그로. 실행했으면 True."""
         if self.switcher is None or not self.switcher.connected:
             self.log(tr("app.message.connect_first"))
-            return
+            return False
         try:
             action(self.switcher)
         except Exception as error:      # noqa: BLE001 - 어떤 오류든 사용자에게 보여준다
             self.log(tr("app.message.error", error=error))
+            return False
+        return True
 
     def log(self, message: str):
         self._events.put(("log", time.strftime("%H:%M:%S ") + message))
