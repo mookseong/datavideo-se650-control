@@ -127,11 +127,22 @@ se650/i18n/
   그래서 언어를 바꿔도 저장된 설정이 깨지지 않습니다.
 - 번역이 빠진 키는 영어로, 영어에도 없으면 키 자체가 표시됩니다. 자리표시자 실수가 있어도 프로그램은 죽지 않습니다.
 
+### 번역하지 않는 용어
+
+방송 장비에서 영어가 표준인 용어는 모든 언어팩에서 영어 그대로 둡니다 (실제 SE-650 패널 표기와 일치).
+
+- 버스·버튼: PGM, PVW, AUTO, CUT, FTB, KEY 1, P-in-P, DSK 1, DSK AUTO, DSK CUT
+- 소스: Black, In 1~4, Still, Freeze, Matte, Still 1, Still 2
+- 트랜지션 타입: Mix, Wipe / 출력: PGM+DSK, PVW+DSK, MultiView
+
+목록은 `tests/test_i18n.py` 의 `TERMINOLOGY_PREFIXES` 이고, 언어팩에서 이 값이 영어와 다르면 테스트가 실패합니다.
+섹션 제목, 안내 문구, 메뉴 버튼, 오디오 모드(끔/디지털/아날로그) 같은 일반 단어는 번역합니다.
+
 ### 새 언어 추가 (예: 일본어)
 
 1. `se650/i18n/locales/en` 폴더를 `ja` 로 복사
 2. `_meta.json` 의 `name` 을 `日本語`, `english_name` 을 `Japanese` 로
-3. 나머지 4개 JSON 의 **값만** 번역 (키와 `{host}` 같은 자리표시자는 그대로)
+3. 나머지 4개 JSON 의 **값만** 번역 (키와 `{host}` 같은 자리표시자, 위의 "번역하지 않는 용어"는 그대로)
 4. `python -m unittest tests.test_i18n` — 빠진 키, 남는 키, 자리표시자 불일치, 빈 문구를 잡아냅니다
 
 코드 수정은 필요 없습니다. 언어 선택 목록에 자동으로 나타납니다.

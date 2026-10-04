@@ -55,34 +55,34 @@
   },
   "choice": {
     "source": {
-      "black": "블랙",
-      "in_1": "입력 1",
-      "in_2": "입력 2",
-      "in_3": "입력 3",
-      "in_4": "입력 4",
-      "still": "스틸",
-      "freeze": "프리즈",
-      "matte": "매트",
-      "still_1": "스틸 1",
-      "still_2": "스틸 2"
+      "black": "Black",
+      "in_1": "In 1",
+      "in_2": "In 2",
+      "in_3": "In 3",
+      "in_4": "In 4",
+      "still": "Still",
+      "freeze": "Freeze",
+      "matte": "Matte",
+      "still_1": "Still 1",
+      "still_2": "Still 2"
     },
     "transition_type": {
-      "mix": "믹스",
-      "wipe": "와이프"
+      "mix": "Mix",
+      "wipe": "Wipe"
     },
     "hdmi_out": {
       "pgm": "PGM",
       "pvw": "PVW",
       "pgm_dsk": "PGM+DSK",
       "pvw_dsk": "PVW+DSK",
-      "multiview": "멀티뷰"
+      "multiview": "MultiView"
     },
     "audio_source": {
       "follow": "영상 연동",
-      "in_1": "입력 1",
-      "in_2": "입력 2",
-      "in_3": "입력 3",
-      "in_4": "입력 4"
+      "in_1": "In 1",
+      "in_2": "In 2",
+      "in_3": "In 3",
+      "in_4": "In 4"
     },
     "audio_mode": {
       "off": "끔",

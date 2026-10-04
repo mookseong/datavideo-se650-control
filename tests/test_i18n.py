@@ -18,6 +18,17 @@ from se650.protocol.constants import (AUDIO_MODES, AUDIO_SOURCES, HDMI_OUTPUTS, 
                                       TRANSITION_TYPES)
 
 LAYER_FILES = {"transport", "protocol", "control", "app"}
+
+# 방송 장비에서 영어가 표준인 용어: 어느 언어팩이든 영어 원문과 같아야 한다 (README "번역하지 않는 용어")
+TERMINOLOGY_PREFIXES = (
+    "app.bus.",                          # PGM, PVW
+    "app.transition.auto", "app.transition.cut", "app.transition.ftb",
+    "app.keyer.key1", "app.keyer.pip", "app.keyer.dsk1", "app.keyer.dsk_auto", "app.keyer.dsk_cut",
+    "app.choice.source.",                # Black, In 1~4, Still, Freeze, Matte, Still 1/2
+    "app.choice.transition_type.",       # Mix, Wipe
+    "app.choice.hdmi_out.",              # PGM, PVW, PGM+DSK, PVW+DSK, MultiView
+    "app.choice.audio_source.in_",       # In 1~4
+)
 PACKS = load_all()
 REFERENCE = PACKS["en"]
 
@@ -61,6 +72,13 @@ class LanguagePackTests(unittest.TestCase):
             for table, names in tables.items():
                 for name in names:
                     self.assertIn(choice_key(table, name), pack.messages, "%s %s.%s" % (code, table, name))
+
+    def test_terminology_kept_in_english(self):
+        terminology = [key for key in REFERENCE.messages if key.startswith(TERMINOLOGY_PREFIXES)]
+        self.assertGreater(len(terminology), 25)
+        for code, pack in PACKS.items():
+            changed = {key: pack.messages[key] for key in terminology if pack.messages[key] != REFERENCE.messages[key]}
+            self.assertEqual(changed, {}, code)
 
     def test_korean_actually_translated(self):
         korean = PACKS["ko"].messages
