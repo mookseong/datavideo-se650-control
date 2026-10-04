@@ -1,0 +1,16 @@
+{
+  "error": {
+    "discovery_reply_length": "Invalid port reply length: {reply}",
+    "discovery_error_reply": "The switcher rejected the port request: {reply}",
+    "no_free_port": "No free real-time port. Other PCs/apps (or the control panel) are using all 4 channels.",
+    "unknown_port": "Unexpected port number in reply: {port}",
+    "not_connected": "Not connected"
+  },
+  "log": {
+    "ports": "Real-time port {realtime} / command port {command}",
+    "connected": "Connected: {host}",
+    "closed": "Connection closed",
+    "lost": "Connection lost",
+    "channel_ended": "{channel} channel stopped receiving"
+  }
+}

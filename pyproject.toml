@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "se650-control"
+version = "0.1.0"
+description = "Datavideo SE-650 video switcher control over Ethernet (DVIP) - GUI and CLI"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.scripts]
+se650 = "se650.app.main:main"
+
+[tool.setuptools.packages.find]
+include = ["se650*"]
+
+[tool.setuptools.package-data]
+"se650.i18n" = ["locales/*/*.json"]

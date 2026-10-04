@@ -1,0 +1,5 @@
+{
+  "error": {
+    "unknown_choice": "Unknown value: {value} (valid: {choices})"
+  }
+}

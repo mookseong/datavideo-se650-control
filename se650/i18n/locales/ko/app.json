@@ -1,0 +1,110 @@
+{
+  "window_title": "Datavideo SE-650 DVIP 제어",
+  "connection": {
+    "ip_label": "SE-650 IP",
+    "connect": "연결",
+    "disconnect": "연결 해제",
+    "refresh": "새로고침",
+    "auto_connect": "시작 시 자동 연결",
+    "language": "언어"
+  },
+  "status": {
+    "disconnected": "● 연결 안 됨",
+    "connecting": "● 연결 중...",
+    "connected": "● 연결됨 ({host})",
+    "failed": "● 연결 실패",
+    "lost": "● 연결 끊김"
+  },
+  "bus": {
+    "pgm": "PGM",
+    "pvw": "PVW"
+  },
+  "transition": {
+    "title": "트랜지션",
+    "auto": "AUTO",
+    "cut": "CUT",
+    "ftb": "FTB",
+    "type": "타입",
+    "frames": "프레임",
+    "apply": "적용"
+  },
+  "keyer": {
+    "title": "키어 / DSK",
+    "key1": "KEY 1",
+    "pip": "P-in-P",
+    "dsk1": "DSK 1",
+    "dsk_auto": "DSK AUTO",
+    "dsk_cut": "DSK CUT"
+  },
+  "output": {
+    "title": "출력 · 오디오 · 유저 메모리",
+    "hdmi": "HDMI 출력",
+    "audio": "오디오",
+    "audio_mode": "오디오 모드",
+    "user": "메모리",
+    "load": "불러오기",
+    "save": "저장"
+  },
+  "menu": {
+    "menu": "메뉴",
+    "up": "위",
+    "down": "아래",
+    "left": "왼쪽",
+    "right": "오른쪽",
+    "enter": "확인"
+  },
+  "choice": {
+    "source": {
+      "black": "블랙",
+      "in_1": "입력 1",
+      "in_2": "입력 2",
+      "in_3": "입력 3",
+      "in_4": "입력 4",
+      "still": "스틸",
+      "freeze": "프리즈",
+      "matte": "매트",
+      "still_1": "스틸 1",
+      "still_2": "스틸 2"
+    },
+    "transition_type": {
+      "mix": "믹스",
+      "wipe": "와이프"
+    },
+    "hdmi_out": {
+      "pgm": "PGM",
+      "pvw": "PVW",
+      "pgm_dsk": "PGM+DSK",
+      "pvw_dsk": "PVW+DSK",
+      "multiview": "멀티뷰"
+    },
+    "audio_source": {
+      "follow": "영상 연동",
+      "in_1": "입력 1",
+      "in_2": "입력 2",
+      "in_3": "입력 3",
+      "in_4": "입력 4"
+    },
+    "audio_mode": {
+      "off": "끔",
+      "digital": "디지털",
+      "analog": "아날로그"
+    }
+  },
+  "message": {
+    "hint": "IP 입력 후 [연결]  |  단축키: 1~4 PVW, Enter AUTO, Space CUT, F FTB",
+    "settings_file": "설정 파일: {path}",
+    "connect_first": "먼저 연결하세요",
+    "enter_ip": "IP 를 입력하세요",
+    "state_ok": "상태 수신 OK (PGM={pgm}, PVW={pvw})",
+    "no_state": "{seconds}초 동안 상태 응답이 없습니다. [새로고침]을 눌러보고, 계속 안 되면 로그를 알려주세요.",
+    "error": "오류: {error}",
+    "connect_failed": "연결 실패: {error}",
+    "frames_not_number": "프레임 수는 숫자여야 합니다",
+    "language_changed": "언어: {name}"
+  },
+  "cli": {
+    "usage": "사용법: python se650_control.py [--lang en|ko] <IP> <명령> [인수]\n  pgm <src> | pvw <src>        소스 선택 (Black, 1~4, Matte, Still, Freeze 또는 번호)\n  auto | cut                   M/E 트랜지션\n  dskauto | dskcut             DSK 트랜지션\n  ftb                          페이드 투 블랙\n  type mix|wipe                트랜지션 타입\n  dur <frames> [me|dsk|ftb]    트랜지션 길이\n  key1|pip|dsk1 pgm|pvw        키어 버튼\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"~\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          유저 메모리\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       현재 상태 출력",
+    "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | 입력이름: {names}",
+    "no_state": "[warn] {seconds}초 동안 상태 응답이 없습니다"
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "window_title": "Datavideo SE-650 DVIP Control",
+  "connection": {
+    "ip_label": "SE-650 IP",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "refresh": "Refresh",
+    "auto_connect": "Connect on start",
+    "language": "Language"
+  },
+  "status": {
+    "disconnected": "● Not connected",
+    "connecting": "● Connecting...",
+    "connected": "● Connected ({host})",
+    "failed": "● Connection failed",
+    "lost": "● Connection lost"
+  },
+  "bus": {
+    "pgm": "PGM",
+    "pvw": "PVW"
+  },
+  "transition": {
+    "title": "TRANSITION",
+    "auto": "AUTO",
+    "cut": "CUT",
+    "ftb": "FTB",
+    "type": "Type",
+    "frames": "Frames",
+    "apply": "Apply"
+  },
+  "keyer": {
+    "title": "KEYER / DSK",
+    "key1": "KEY 1",
+    "pip": "P-in-P",
+    "dsk1": "DSK 1",
+    "dsk_auto": "DSK AUTO",
+    "dsk_cut": "DSK CUT"
+  },
+  "output": {
+    "title": "OUTPUT · AUDIO · USER MEM",
+    "hdmi": "HDMI OUT",
+    "audio": "AUDIO",
+    "audio_mode": "A.MODE",
+    "user": "USER",
+    "load": "LOAD",
+    "save": "SAVE"
+  },
+  "menu": {
+    "menu": "MENU",
+    "up": "UP",
+    "down": "DOWN",
+    "left": "LEFT",
+    "right": "RIGHT",
+    "enter": "ENTER"
+  },
+  "choice": {
+    "source": {
+      "black": "Black",
+      "in_1": "In 1",
+      "in_2": "In 2",
+      "in_3": "In 3",
+      "in_4": "In 4",
+      "still": "Still",
+      "freeze": "Freeze",
+      "matte": "Matte",
+      "still_1": "Still 1",
+      "still_2": "Still 2"
+    },
+    "transition_type": {
+      "mix": "Mix",
+      "wipe": "Wipe"
+    },
+    "hdmi_out": {
+      "pgm": "PGM",
+      "pvw": "PVW",
+      "pgm_dsk": "PGM+DSK",
+      "pvw_dsk": "PVW+DSK",
+      "multiview": "MultiView"
+    },
+    "audio_source": {
+      "follow": "Follow video",
+      "in_1": "In 1",
+      "in_2": "In 2",
+      "in_3": "In 3",
+      "in_4": "In 4"
+    },
+    "audio_mode": {
+      "off": "Off",
+      "digital": "Digital",
+      "analog": "Analog"
+    }
+  },
+  "message": {
+    "hint": "Enter the IP and press [Connect]  |  Shortcuts: 1-4 PVW, Enter AUTO, Space CUT, F FTB",
+    "settings_file": "Settings file: {path}",
+    "connect_first": "Connect first",
+    "enter_ip": "Enter an IP address",
+    "state_ok": "State received (PGM={pgm}, PVW={pvw})",
+    "no_state": "No state reply for {seconds} s. Press [Refresh]; if it still fails, please send the log.",
+    "error": "Error: {error}",
+    "connect_failed": "Connection failed: {error}",
+    "frames_not_number": "Frame count must be a number",
+    "language_changed": "Language: {name}"
+  },
+  "cli": {
+    "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (Black, 1-4, Matte, Still, Freeze or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state",
+    "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | Input names: {names}",
+    "no_state": "[warn] No state reply for {seconds} s"
+  }
+}

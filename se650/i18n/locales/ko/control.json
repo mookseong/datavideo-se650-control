@@ -1,0 +1,11 @@
+{
+  "error": {
+    "invalid_bus": "bus 는 'pgm' 또는 'pvw' 여야 합니다: {bus}"
+  },
+  "log": {
+    "input_name": "입력 {number} 이름: {name}",
+    "state_retry": "상태 응답 없음, 재요청 ({attempt}/{total})",
+    "keyer_sent": "[키어 송신 {bus} 버튼] {keyer} ON={on} TRANS={trans} -> PVW표시={preview}",
+    "keyer_received": "[키어 수신] {keyer} ON={on} TRANS={trans} -> PVW표시={preview}"
+  }
+}

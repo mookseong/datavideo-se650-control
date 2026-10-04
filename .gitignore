@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 테스트 / 도구
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# 사용자별 설정 (IP 등) - 커밋하지 않음
+se650_settings.json
+se650_settings.json.tmp
+
+# 공식 프로토콜 문서는 Datavideo 저작물이므로 레포에 포함하지 않음 (README 의 링크 참고)
+*.pdf
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,11 @@
+{
+  "error": {
+    "invalid_bus": "Bus must be 'pgm' or 'pvw': {bus}"
+  },
+  "log": {
+    "input_name": "Input {number} name: {name}",
+    "state_retry": "No state reply, requesting again ({attempt}/{total})",
+    "keyer_sent": "[Keyer sent: {bus} button] {keyer} ON={on} TRANS={trans} -> PVW={preview}",
+    "keyer_received": "[Keyer received] {keyer} ON={on} TRANS={trans} -> PVW={preview}"
+  }
+}
