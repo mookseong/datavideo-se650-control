@@ -65,6 +65,12 @@ class DvipConnection:
             raise NotConnectedError()
         self._command.send(payload)
 
+    @property
+    def diagnostics(self) -> dict:
+        command = self._command
+        return {"null_replies": getattr(command, "null_replies", 0),
+                "nulls_ignored": getattr(command, "nulls_ignored", 0)}
+
     def close(self):
         was_connected = self.connected
         self.connected = False
@@ -73,7 +79,7 @@ class DvipConnection:
             if channel:
                 channel.close()
         if was_connected:
-            log.info(tr("transport.log.closed"))
+            log.info(tr("transport.log.closed_with_stats", **self.diagnostics))
 
     def _connect(self, port: int) -> socket.socket:
         sock = socket.create_connection((self.host, port), timeout=self._timeout)

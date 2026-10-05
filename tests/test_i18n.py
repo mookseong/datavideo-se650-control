@@ -164,7 +164,7 @@ class GlobalApiTests(unittest.TestCase):
         i18n.set_locale("ko")
         with self.assertRaises(DiscoveryError) as ctx:
             parse_discovery_reply(b"\x08\x00\x00\x00\xff\xff\x55\xaa")
-        self.assertRegex(str(ctx.exception), "사용 가능한")
+        self.assertRegex(str(ctx.exception), "빈 연결 채널")
 
 
 if __name__ == "__main__":

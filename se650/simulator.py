@@ -10,6 +10,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 
 CMD_GET, CMD_SET, CMD_INPUT_NAME, CMD_MENU = 0, 1, 9, 0x15
 RESULT_INPUT_NAME = 3
@@ -69,6 +70,9 @@ class FakeSE650:
         self.commands_received = []          # 명령 포트로 받은 payload
         self.realtime_replies = []           # 실시간 포트로 받은 payload (전부 null 이어야 정상)
         self.command_nulls = 0               # 명령 포트로 받은 null (접속 인사 1 + 장비가 보낸 null 에 대한 답장)
+        # 명령 채널 null 동작 (실제 장비가 어떤지는 문서에 없음):
+        #   "silent" 받은 null 무시 / "echo" 받은 null 을 되돌림 / "spam" 0.5초 동안 null 을 쉬지 않고 보냄
+        self.command_null_mode = "silent"
         self.menu_keys = []
         self.wipe_levels = []                # 받은 T-바 진행률
 
@@ -151,9 +155,16 @@ class FakeSE650:
             conn.sendall(frame(struct.pack("<I", CMD_SET)))   # 장비 쪽 null 한 번 -> 컨트롤러가 한 번 되돌려야 함
         except OSError:
             return
+        if self.command_null_mode == "spam":
+            threading.Thread(target=self._spam_nulls, args=(conn,), daemon=True).start()
         for payload in read_payloads(conn):
-            if len(payload) == 4:                    # null: 기록만 하고 되돌리지 않는다 (서로 되돌리면 무한 핑퐁)
+            if len(payload) == 4:
                 self.command_nulls += 1
+                if self.command_null_mode == "echo":
+                    try:
+                        conn.sendall(frame(payload))
+                    except OSError:
+                        break
                 continue
             self.commands_received.append(payload)
             command = struct.unpack_from("<I", payload)[0]
@@ -163,6 +174,15 @@ class FakeSE650:
             except OSError:
                 break                                # stop() 중 소켓이 닫힘
         conn.close()
+
+    @staticmethod
+    def _spam_nulls(conn):
+        deadline = time.monotonic() + 0.5
+        while time.monotonic() < deadline:
+            try:
+                conn.sendall(frame(struct.pack("<I", CMD_SET)))
+            except OSError:
+                return
 
     # ------------------------------------------------------------ 명령 처리
     def _on_set(self, conn, payload):

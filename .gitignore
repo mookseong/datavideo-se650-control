@@ -13,9 +13,10 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 
-# 사용자별 설정 (IP 등) - 커밋하지 않음
+# 사용자별 설정 (IP 등), 진단 로그 - 커밋하지 않음
 se650_settings.json
 se650_settings.json.tmp
+se650.log*
 
 # 공식 프로토콜 문서는 Datavideo 저작물이므로 레포에 포함하지 않음 (README 의 링크 참고)
 *.pdf

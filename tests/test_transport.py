@@ -123,6 +123,41 @@ class ConnectionTests(unittest.TestCase):
         time.sleep(0.3)
         self.assertEqual(self.fx.device.command_nulls, 2)
 
+    def test_no_null_ping_pong_with_echoing_device(self):
+        """장비가 null 에 응답해도 핑퐁이 생기지 않는다 (고치기 전: 초당 약 9만 패킷)."""
+        self.fx.device.command_null_mode = "echo"
+        self.open()
+        time.sleep(1.0)
+        self.assertLess(self.fx.device.command_nulls, 15)
+
+    def test_null_flood_from_device_is_rate_limited_and_reported(self):
+        self.fx.device.command_null_mode = "spam"
+        with self.assertLogs("se650.transport", "WARNING") as logs:
+            self.open()
+            time.sleep(0.8)
+        self.assertLessEqual(self.fx.device.command_nulls, 1 + 1 + 6)     # 인사 + 초당 최대 10회 x 0.5초
+        self.assertTrue(any("null" in line for line in logs.output))
+
+    def test_close_reports_null_statistics(self):
+        self.fx.device.command_null_mode = "echo"
+        self.open()
+        time.sleep(0.3)
+        with self.assertLogs("se650.transport", "INFO") as logs:
+            self.conn.close()
+        ignored = self.conn.diagnostics["nulls_ignored"]
+        self.assertTrue(1 <= ignored <= 3, ignored)          # 무시 >= 1 이면 "장비가 null 에 응답하는 기기"라는 증거
+        self.assertTrue(any("%d" % ignored in line for line in logs.output), logs.output)
+
+    def test_repeated_connect_disconnect_releases_device_sockets(self):
+        """연결/해제를 반복해도 장비 쪽에 열린 연결이 남지 않는다 (채널 반납)."""
+        self.conn.close()
+        for _ in range(5):
+            conn = self.fx.connection()
+            conn.open(lambda p: None, lambda p: None, lambda: None)
+            conn.close()
+            self.assertTrue(wait_for(lambda: all(c.fileno() == -1 for c in self.fx.device._clients)),
+                            "장비 쪽 소켓이 닫히지 않음")
+
     def test_send_command_reaches_command_port(self):
         self.open()
         self.conn.send_command(struct.pack("<II", 0x15, 3))

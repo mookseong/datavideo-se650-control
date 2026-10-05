@@ -17,7 +17,12 @@ def split_language_option(argv):
 
 
 def main(argv=None) -> int:
+    import os
+
+    from .logfile import enable_file_logging
+    from .settings import default_path
     language, argv = split_language_option(sys.argv[1:] if argv is None else argv)
+    enable_file_logging(os.path.dirname(default_path()))
     if argv:
         from ..i18n import set_locale
         from .cli import run_cli

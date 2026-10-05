@@ -157,6 +157,18 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.window.connection_bar.connect_button.cget("text"), tr("app.connection.connect"))
         self.connect()
 
+    def test_reconnect_waits_after_disconnect(self):
+        """해제 직후 재연결은 스위처가 이전 채널을 정리하도록 잠시 기다렸다가 연결한다."""
+        from se650.app.gui import window as window_module
+        self.connect()
+        self.window.toggle_connection()
+        self.window.connect()
+        self.pump(0.3)
+        self.assertEqual(self.window._status[0], "connecting")
+        self.assertIsNone(self.window.switcher)                              # 아직 연결 시도 안 함
+        self.assertTrue(self.pump_until(lambda: self.window._status[0] == "connected",
+                                        window_module.RECONNECT_DELAY + 3))
+
     def test_device_drop(self):
         self.connect()
         self.fx.stop()

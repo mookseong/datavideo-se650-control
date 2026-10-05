@@ -18,6 +18,7 @@ log = logging.getLogger("se650.app")
 
 POLL_INTERVAL_MS = 50
 READY_TIMEOUT = 3.0
+RECONNECT_DELAY = 1.5          # 해제 직후 재연결 전 대기: 스위처가 이전 채널을 정리할 시간
 SHORTCUT_IGNORED_WIDGETS = {"Entry", "TEntry", "TSpinbox", "Spinbox", "Text", "TCombobox"}
 SHORTCUTS = {
     "Return": lambda sw: sw.auto(),
@@ -53,6 +54,8 @@ class MainWindow:
         self._events = queue.Queue()      # 모든 tk 위젯 변경은 GUI 스레드의 _poll 에서만
         self._poll_job = None
         self._status = ("disconnected", None)
+        self._last_disconnect = float("-inf")
+        self._pending_connect = None
 
         set_locale(language or self.settings["language"])     # "" = 시스템 언어
         root.resizable(False, False)
@@ -111,7 +114,8 @@ class MainWindow:
         return True
 
     def log(self, message: str):
-        self._events.put(("log", time.strftime("%H:%M:%S ") + message))
+        """화면 로그 + 로그 파일 (logging 을 거쳐 _QueueLogHandler 가 화면에 넣는다)."""
+        log.info(message)
 
     def toggle_connection(self):
         if self.switcher and self.switcher.connected:
@@ -126,6 +130,14 @@ class MainWindow:
             return
         self.settings.set("ip", host)
         self._show_status("connecting")
+        wait = RECONNECT_DELAY - (time.monotonic() - self._last_disconnect)
+        if wait > 0:
+            self._pending_connect = self.root.after(int(wait * 1000), lambda: self._start_connect(host))
+        else:
+            self._start_connect(host)
+
+    def _start_connect(self, host):
+        self._pending_connect = None
         # 접속 도중 도착하는 상태 콜백도 처리되도록 connect() 전에 self.switcher 를 할당한다
         switcher = self._switcher_factory(host, on_change=lambda: self._events.put(("state", None)))
         self.switcher = switcher
@@ -134,6 +146,7 @@ class MainWindow:
     def disconnect(self):
         if self.switcher:
             self.switcher.close()
+            self._last_disconnect = time.monotonic()
         self.switcher = None
         self._show_status("disconnected")
         self._refresh_panels()
@@ -157,6 +170,9 @@ class MainWindow:
 
     def stop(self):
         """창을 닫지 않고 백그라운드 작업만 정리 (테스트에서도 사용)."""
+        if self._pending_connect:
+            self.root.after_cancel(self._pending_connect)
+            self._pending_connect = None
         if self._poll_job:
             try:
                 self.root.after_cancel(self._poll_job)
@@ -208,6 +224,7 @@ class MainWindow:
         for panel in self._panels:
             panel.refresh(self.switcher)
         if self.switcher and not self.switcher.connected and self._status[0] == "connected":
+            self._last_disconnect = time.monotonic()
             self._show_status("lost")
 
     def _show_status(self, status, host=None):

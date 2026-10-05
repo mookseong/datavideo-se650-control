@@ -2,15 +2,16 @@
   "error": {
     "discovery_reply_length": "Invalid port reply length: {reply}",
     "discovery_error_reply": "The switcher rejected the port request: {reply}",
-    "no_free_port": "No free real-time port. Other PCs/apps (or the control panel) are using all 4 channels.",
+    "no_free_port": "No free connection channel on the switcher (the control panel + up to 3 PCs). Close other apps; if you just disconnected, wait a few seconds and try again. If it persists, the switcher may be holding stale channels and needs a restart.",
     "unknown_port": "Unexpected port number in reply: {port}",
     "not_connected": "Not connected"
   },
   "log": {
     "ports": "Real-time port {realtime} / command port {command}",
     "connected": "Connected: {host}",
-    "closed": "Connection closed",
     "lost": "Connection lost",
-    "channel_ended": "{channel} channel stopped receiving"
+    "channel_ended": "{channel} channel stopped receiving",
+    "closed_with_stats": "Connection closed (command-channel null replies: {null_replies}, ignored: {nulls_ignored})",
+    "null_flood": "The switcher is answering null packets on the command channel ({count}/s). Replies are rate-limited to protect the switcher."
   }
 }
