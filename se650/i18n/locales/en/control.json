@@ -1,11 +1,20 @@
 {
   "error": {
-    "invalid_bus": "Bus must be 'pgm' or 'pvw': {bus}"
+    "invalid_bus": "Bus must be 'pgm' or 'pvw': {bus}",
+    "engine_busy": "The switcher is still processing the previous transition command. Try again in a moment.",
+    "memory_busy": "The switcher is still processing a user memory operation. Try again when it finishes.",
+    "undocumented_command": "Remote menu keys use a command that is not in the SE-650 protocol document, so they are off by default. Enable them under Extras if you accept the risk.",
+    "analog_needs_input": "In Analog audio mode only inputs 1-4 can be used (not Follow video)."
   },
   "log": {
     "input_name": "Input {number} name: {name}",
     "state_retry": "No state reply, requesting again ({attempt}/{total})",
     "keyer_sent": "[Keyer sent: {bus} button] {keyer} ON={on} TRANS={trans} -> PVW={preview}",
-    "keyer_received": "[Keyer received] {keyer} ON={on} TRANS={trans} -> PVW={preview}"
+    "keyer_received": "[Keyer received] {keyer} ON={on} TRANS={trans} -> PVW={preview}",
+    "memory_load": "load",
+    "memory_store": "save",
+    "memory_ok": "User memory {slot} {operation}: done",
+    "memory_not_found": "User memory {slot} {operation}: nothing saved in that slot",
+    "memory_failed": "User memory {slot} {operation}: failed (result code {result})"
   }
 }

@@ -14,6 +14,7 @@ class CliTests(unittest.TestCase):
         self.output = []
 
     def tearDown(self):
+        self.fx.assert_compliant(self)
         self.fx.stop()
         i18n.set_locale("en")
 

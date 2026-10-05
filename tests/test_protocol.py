@@ -39,6 +39,11 @@ class EncodeTests(unittest.TestCase):
         # T-바 진행률 50.0 -> 0x42480000
         self.assertEqual(codec.encode_set([(Controls.WIPE_LEVEL, 50)]), bytes.fromhex("01000000 01000200 00004842"))
 
+    def test_realtime_reply_packet(self):
+        """3.2.4.2: 답장은 SET 과 같은 형식, 명령 값은 무시되므로 0 (3.2.2 예시와 동일)."""
+        self.assertEqual(codec.encode_realtime_reply([(Controls.WIPE_LEVEL, 50)]),
+                         bytes.fromhex("00000000 01000200 00004842"))
+
     def test_input_name_and_menu(self):
         self.assertEqual(codec.encode_get_input_name(2), bytes.fromhex("09000000 02000000"))
         self.assertEqual(codec.encode_menu(6), bytes.fromhex("15000000 06000000"))

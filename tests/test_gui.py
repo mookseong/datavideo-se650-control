@@ -39,6 +39,7 @@ class GuiTests(unittest.TestCase):
         self.window.connection_bar.ip_var.set("127.0.0.1")
 
     def tearDown(self):
+        self.fx.assert_compliant(self)          # 모든 GUI 테스트: 문서 규칙 위반 0건
         try:
             self.window.stop()
             self.root.destroy()
@@ -278,31 +279,69 @@ class GuiTests(unittest.TestCase):
         self.assertIn(tr("app.message.reset_unsupported"), self.log_text())
         self.assertEqual(len(self.fx.device.commands_received), before)
 
-    def test_menu_pad(self):
+    def test_menu_pad_off_by_default(self):
+        """메뉴 키는 문서에 없는 명령 -> 기본으로 보내지 않고 안내만."""
         self.connect()
+        self.window.device.menu.buttons["down"].invoke()
+        self.pump(0.2)
+        self.assertEqual(self.fx.device.menu_keys, [])
+        self.assertIn(tr("control.error.undocumented_command"), self.log_text())
+        self.assertEqual(self.window.device.menu.buttons["down"].cget("fg"), theme.MUTED)
+
+    def test_menu_pad_when_explicitly_allowed(self):
+        self.connect()
+        self.window.extras.undocumented_var.set(True)
+        self.window.extras._toggle_undocumented()
+        self.assertTrue(self.settings["undocumented_menu"])
         self.window.device.menu.buttons["down"].invoke()
         self.window.device.menu.buttons["enter"].invoke()
         self.assertTrue(self.pump_until(lambda: self.fx.device.menu_keys == [3, 6]))
+        self.assertTrue(all("undocumented" in v for v in self.fx.device.violations))   # 허용한 경우에만 예상된 기록
+        self.fx.device.violations.clear()
 
     def test_tbar_full_travel_completes_transition(self):
         self.connect()
+        before = len(self.fx.device.commands_received)
         tbar = self.window.device.tbar
-        for position in (20, 60, 100):
+        for position in range(0, 101, 4):
             tbar._on_move(str(position))
-            time.sleep(tbar.SEND_INTERVAL)
         tbar._on_release(None)
         self.assertTrue(self.pump_until(lambda: self.lit("pgm") == ["2"] and self.lit("pvw") == ["1"]))
         self.assertEqual(self.fx.device.wipe_levels[-1], 100.0)
         self.assertEqual(self.window.switcher.tbar.origin, 100)         # 다음 트랜지션은 위 -> 아래
+        self.assertEqual(len(self.fx.device.commands_received), before)  # 명령 패킷 0개 (실시간 답장에 실림)
 
     def test_tbar_without_connection_logs_once_per_drag(self):
         tbar = self.window.device.tbar
         for position in (10, 30, 50):
             tbar._on_move(str(position))
-            time.sleep(tbar.SEND_INTERVAL)
         tbar._on_release(None)
         self.pump(0.2)
         self.assertEqual(self.log_text().count(tr("app.message.connect_first")), 1)
+
+    def test_button_mashing_stays_within_protocol(self):
+        """모든 버튼을 연타해도 문서 규칙 위반 0, 명령 채널 패킷 수도 제한된다."""
+        self.connect()
+        device = self.window.device
+        before = len(self.fx.device.commands_received)
+        presses = 0
+        for _ in range(3):
+            for widget in (device.cut_auto.cut_button, device.cut_auto.auto_button,
+                           device.memory.buttons["user_1"], device.memory.buttons["user_2"],
+                           device.transition.buttons["trans_bg"], device.wipe.buttons["rev"],
+                           device.keyers.buttons[("key1", "pgm")], device.logo.button,
+                           device.sources.buttons["pvw"]["3"], device.sources.buttons["pgm"]["still"],
+                           self.window.extras.ftb_button, device.menu.buttons["down"]):
+                widget.invoke()
+                presses += 1
+            for position in list(range(0, 101, 5)) + list(range(100, -1, -5)):
+                device.tbar._on_move(str(position))
+            device.tbar._on_release(None)
+            self.window.refresh_from_device()
+        self.pump(1.5)
+        sent = len(self.fx.device.commands_received) - before
+        self.assertLessEqual(sent, presses + 6)            # 버튼당 최대 1패킷 + 새로고침/이름 (T-바는 0)
+        self.assertEqual(self.fx.device.menu_keys, [])
 
     def test_choice_labels_translated_but_values_language_independent(self):
         self.window.connection_bar.language.select("ko")

@@ -55,7 +55,8 @@
     "audio_mode": "Audio mode",
     "memory": "User memory",
     "load": "Load",
-    "save": "Save"
+    "save": "Save",
+    "undocumented_menu": "Allow remote menu keys (not in the protocol document)"
   },
   "choice": {
     "source": {
@@ -108,6 +109,7 @@
   "cli": {
     "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (BKG, 1-4, Still 1, Still 2, Black or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state",
     "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | Input names: {names}",
-    "no_state": "[warn] No state reply for {seconds} s"
+    "no_state": "[warn] No state reply for {seconds} s",
+    "undocumented_warning": "[warn] 'menu' uses a command that is not in the SE-650 protocol document."
   }
 }

@@ -1,9 +1,14 @@
-"""스위처 상태 모델. 네트워크와 무관한 순수 도메인 로직."""
+"""스위처 상태 모델. 네트워크와 무관한 순수 도메인 로직.
+
+문서 3.2.3: 장비는 첫 실시간 패킷에 "0 에서 달라진 값"을 보내므로, 접속 전 상태 사본은 모두 0 이어야 한다.
+그래서 모든 필드의 초기값은 0(False) 이다. ("모름" 을 뜻하는 None 을 쓰면 값이 0 인 항목을 영영 못 받는다)
+"""
 from dataclasses import dataclass, field, replace
-from typing import Dict, Optional
+from typing import Dict
 
 from ..protocol.codec import ControlValue
-from ..protocol.constants import KEYERS, Controls, TransitionStatus
+from ..protocol.constants import (KEYERS, Controls, MemoryCommand, MemoryState, TransitionCommand,
+                                  TransitionStatus)
 
 
 @dataclass
@@ -32,12 +37,29 @@ class KeyerState:
 
 @dataclass
 class TransitionEngine:
+    command: int = 0             # 장비가 명령을 처리하면 READY(8) (4.1.8.1.9)
     status: int = TransitionStatus.STOPPED
-    duration: Optional[int] = None
+    duration: int = 0
 
     @property
     def running(self) -> bool:
         return self.status == TransitionStatus.RUNNING
+
+    @property
+    def ready_for_command(self) -> bool:
+        """0 = 아직 명령을 받은 적 없음(정지), 8 = 이전 명령 처리 완료"""
+        return self.command in (TransitionCommand.STOP, TransitionCommand.READY)
+
+
+@dataclass
+class MemoryStatus:
+    command: int = MemoryCommand.READY
+    state: int = MemoryState.READY
+    result: int = 0
+
+    @property
+    def ready_for_command(self) -> bool:
+        return self.command == MemoryCommand.READY and self.state != MemoryState.BUSY
 
 
 def _new_keyers() -> Dict[str, KeyerState]:
@@ -46,17 +68,21 @@ def _new_keyers() -> Dict[str, KeyerState]:
 
 @dataclass
 class SwitcherState:
-    pgm: Optional[int] = None
-    pvw: Optional[int] = None
-    transition_type: Optional[int] = None
+    pgm: int = 0
+    pvw: int = 0
+    transition_type: int = 0
     transition_background: bool = False      # 패널 TRANS BG
-    wipe_pattern: Optional[int] = None
+    wipe_pattern: int = 0
     wipe_reverse: bool = False               # 패널 REV
     ftb_enabled: bool = False
+    hdmi_out: int = 0
+    audio_source: int = 0
+    audio_mode: int = 0
     keyers: Dict[str, KeyerState] = field(default_factory=_new_keyers)
     me: TransitionEngine = field(default_factory=TransitionEngine)
     dsk: TransitionEngine = field(default_factory=TransitionEngine)
     ftb: TransitionEngine = field(default_factory=TransitionEngine)
+    memory: MemoryStatus = field(default_factory=MemoryStatus)
 
     def apply(self, update: ControlValue) -> bool:
         """장비에서 받은 값 하나를 반영. 상태가 바뀌었으면 True."""
@@ -83,6 +109,15 @@ _BINDINGS = {
     Controls.WIPE_PATTERN: (("wipe_pattern",), int),
     Controls.TRANS_REVERSE: (("wipe_reverse",), bool),
     Controls.FTB_ENABLE: (("ftb_enabled",), bool),
+    Controls.HDMI_OUT: (("hdmi_out",), int),
+    Controls.AUDIO_SOURCE: (("audio_source",), int),
+    Controls.AUDIO_MODE: (("audio_mode",), int),
+    Controls.ME_COMMAND: (("me", "command"), int),
+    Controls.DSK_COMMAND: (("dsk", "command"), int),
+    Controls.FTB_COMMAND: (("ftb", "command"), int),
+    Controls.MEMORY_COMMAND: (("memory", "command"), int),
+    Controls.MEMORY_STATE: (("memory", "state"), int),
+    Controls.MEMORY_RESULT: (("memory", "result"), int),
     Controls.ME_STATE: (("me", "status"), int),
     Controls.ME_DURATION: (("me", "duration"), int),
     Controls.DSK_STATE: (("dsk", "status"), int),

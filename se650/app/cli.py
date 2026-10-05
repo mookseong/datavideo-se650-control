@@ -29,9 +29,16 @@ def _commands():
         "amode": (1, lambda sw, a: sw.set_audio_mode(a[0])),
         "load": (1, lambda sw, a: sw.load_memory(a[0])),
         "save": (1, lambda sw, a: sw.store_memory(a[0])),
-        "menu": (1, lambda sw, a: sw.press_menu(a[0])),
+        "menu": (1, _press_menu),
         "status": (0, lambda sw, a: None),
     }
+
+
+def _press_menu(switcher, args):
+    """CLI 에서 menu 를 직접 입력한 것은 명시적 허용으로 본다 (문서에 없는 명령임을 경고)."""
+    print(tr("app.cli.undocumented_warning"))
+    switcher.allow_undocumented = True
+    switcher.press_menu(args[0])
 
 
 def describe(switcher) -> str:

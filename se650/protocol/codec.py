@@ -43,6 +43,11 @@ def _encode_value(control: ControlId, value) -> bytes:
     return _PARAM_VALUE.pack(control.number, control.section, int(value))
 
 
+def encode_realtime_reply(items: Iterable[Tuple[ControlId, Union[int, float]]]) -> bytes:
+    """실시간 채널 답장에 값을 싣는 파라미터/값 패킷 (3.2.4.2). 명령 값은 무시되므로 0 (3.2.2)."""
+    return _COMMAND.pack(0) + b"".join(_encode_value(c, v) for c, v in items)
+
+
 def encode_get(controls: Iterable[ControlId]) -> bytes:
     body = b"".join(_PARAM_ID.pack(c.number, c.section) for c in controls)
     return _COMMAND.pack(Command.GET_CONTROL) + body

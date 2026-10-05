@@ -15,7 +15,6 @@
 그룹마다 클래스 하나: 위젯 생성 + refresh(switcher) 로 램프 반영.
 조작은 run(action) 으로 넘기며 action 은 Switcher 를 받는다.
 """
-import time
 import tkinter as tk
 
 from ...i18n import tr
@@ -27,6 +26,8 @@ ARROWS = {"up": "▲", "down": "▼", "left": "◀", "right": "▶"}
 
 
 class MenuPad(tk.Frame):
+    """원격 메뉴 키는 SE-650 문서에 없는 명령이라 허용했을 때만 동작한다 (아니면 흐리게 + 안내)."""
+
     def __init__(self, parent, run):
         super().__init__(parent, bg=theme.DEVICE_BACKGROUND)
         menu_key = {"menu": "MENU", "up": "UP", "down": "DOWN", "left": "LEFT", "right": "RIGHT", "enter": "ENTER"}
@@ -45,7 +46,9 @@ class MenuPad(tk.Frame):
         add("down", ARROWS["down"], 3, 1, (72, 40))
 
     def refresh(self, switcher):
-        pass
+        allowed = bool(switcher and switcher.allow_undocumented)
+        for button in self.buttons.values():
+            button.configure(fg=theme.LAMP_OFF_TEXT if allowed else theme.MUTED)
 
 
 class WipeGroup(tk.LabelFrame):
@@ -222,14 +225,11 @@ def _matches(key, source):
 
 
 class TBar(tk.Frame):
-    """T-바. 드래그 중에는 일정 간격으로만 보내고, 놓을 때 마지막 위치를 보낸다."""
-    SEND_INTERVAL = 0.04
+    """T-바. 값은 Switcher 가 실시간 답장에 실어 보내므로(필드당 최대 1회) 여기서 속도를 조절하지 않는다."""
 
     def __init__(self, parent, run):
         super().__init__(parent, bg=theme.DEVICE_BACKGROUND)
         self._run = run
-        self._last_sent = 0.0
-        self._pending = None
         self._blocked = False         # 연결 안 됨: 이번 드래그 동안은 다시 시도하지 않음 (로그 도배 방지)
         self.scale = tk.Scale(self, from_=100, to=0, orient="vertical", length=250, width=40, sliderlength=56,
                               showvalue=False, bg="#b8b8b8", troughcolor="#111111", activebackground="#e0e0e0",
@@ -238,21 +238,14 @@ class TBar(tk.Frame):
         self.scale.bind("<ButtonRelease-1>", self._on_release)
 
     def _on_move(self, value):
-        self._pending = float(value)
-        if time.monotonic() - self._last_sent >= self.SEND_INTERVAL:
-            self._flush()
-
-    def _on_release(self, _event):
-        self._flush()
-        self._blocked = False
-
-    def _flush(self):
-        if self._pending is None or self._blocked:
+        if self._blocked:
             return
-        position, self._pending = self._pending, None
-        self._last_sent = time.monotonic()
+        position = float(value)
         if not self._run(lambda sw: sw.move_tbar(position)):
             self._blocked = True
+
+    def _on_release(self, _event):
+        self._blocked = False
 
     def refresh(self, switcher):
         pass

@@ -13,6 +13,7 @@ DEFAULTS = {
     "user_memory": 1,
     "geometry": "",
     "language": "",                # "" = 시스템 언어, 아니면 "en" / "ko" ...
+    "undocumented_menu": False,    # 문서에 없는 원격 메뉴 키 명령 허용
 }
 FILE_NAME = "se650_settings.json"
 

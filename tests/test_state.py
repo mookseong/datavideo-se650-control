@@ -3,6 +3,8 @@ import itertools
 import unittest
 
 from se650.control.state import STATE_CONTROLS, KeyerState, SwitcherState
+from se650.control.gates import ReadyGate
+from se650.control.outbox import RealtimeOutbox
 from se650.control.tbar import TBarTracker
 from se650.protocol.codec import ControlValue
 from se650.protocol.constants import Controls
@@ -80,7 +82,16 @@ class ApplyTests(unittest.TestCase):
 
     def test_subsection_ignored(self):
         self.assertFalse(self.state.apply(ControlValue(Controls.PGM_SRC, 4, subsection=1)))
-        self.assertIsNone(self.state.pgm)
+        self.assertEqual(self.state.pgm, 0)
+
+    def test_engine_and_memory_readiness(self):
+        self.assertTrue(self.state.me.ready_for_command)                  # 0 = 명령 없음
+        self.state.apply(ControlValue(Controls.ME_COMMAND, 5))
+        self.assertFalse(self.state.me.ready_for_command)                 # 처리 전
+        self.state.apply(ControlValue(Controls.ME_COMMAND, 8))
+        self.assertTrue(self.state.me.ready_for_command)                  # Ready (4.1.8.1.9)
+        self.state.apply(ControlValue(Controls.MEMORY_STATE, 1))
+        self.assertFalse(self.state.memory.ready_for_command)             # Busy (4.1.9.3)
 
     def test_unknown_control_ignored(self):
         self.assertFalse(self.state.apply(ControlValue(Controls.KEY1_SRC, 3)))
@@ -111,6 +122,53 @@ class TBarTests(unittest.TestCase):
         tbar = TBarTracker()
         self.assertEqual(tbar.level_for(-5), 0)
         self.assertEqual(tbar.level_for(140), 100)
+
+
+class ReadyGateTests(unittest.TestCase):
+    def setUp(self):
+        self.now = [0.0]
+        self.gate = ReadyGate(min_interval=0.1, timeout=1.0, clock=lambda: self.now[0])
+
+    def test_first_command_follows_device(self):
+        self.assertTrue(self.gate.can_send(True))
+        self.assertFalse(self.gate.can_send(False))
+
+    def test_min_interval_even_if_device_says_ready(self):
+        self.gate.mark_sent()
+        self.now[0] = 0.05
+        self.assertFalse(self.gate.can_send(True))
+        self.now[0] = 0.1
+        self.assertTrue(self.gate.can_send(True))
+
+    def test_waits_for_ready_then_times_out(self):
+        self.gate.mark_sent()
+        self.now[0] = 0.5
+        self.assertFalse(self.gate.can_send(False))
+        self.now[0] = 1.0
+        self.assertTrue(self.gate.can_send(False))            # 응답이 없어도 영원히 잠기지 않음
+
+
+class RealtimeOutboxTests(unittest.TestCase):
+    def test_latest_value_wins(self):
+        box = RealtimeOutbox()
+        for value in (1, 2, 3):
+            box.put("level", value)
+        self.assertEqual(box.take(), [("level", 3)])
+        self.assertEqual(box.take(), [])
+
+    def test_must_deliver_is_not_overwritten(self):
+        box = RealtimeOutbox()
+        box.put("level", 100, must_deliver=True)
+        box.put("level", 5)
+        box.put("level", 9)
+        self.assertEqual(box.take(), [("level", 100)])
+        self.assertEqual(box.take(), [("level", 9)])
+
+    def test_one_value_per_control_per_take(self):
+        box = RealtimeOutbox()
+        box.put("a", 1)
+        box.put("b", 2)
+        self.assertEqual(sorted(box.take()), [("a", 1), ("b", 2)])
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ class Command(IntEnum):                       # (2.2)
     GET_CONTROL = 0
     SET_CONTROL = 1
     GET_INPUT_NAME = 9
-    MENU = 0x15                               # 문서 미기재, 레퍼런스 구현 기준
+    MENU = 0x15     # SE-650 문서 2.2 목록(0~20)에 없음. 레퍼런스 구현이 SE-700 표를 빌려 씀 -> 기본 비활성
 
 
 # 장비가 보내는 응답 명령 ID
@@ -75,7 +75,9 @@ class Controls:
 
     # --- SECTION_MEMORY_CTRL (4.1.9) ---
     MEMORY_SELECT = ControlId(Section.MEMORY, 0)
-    MEMORY_COMMAND = ControlId(Section.MEMORY, 1)
+    MEMORY_COMMAND = ControlId(Section.MEMORY, 1)        # Ready(0) 일 때만 새 명령 (4.1.9.2)
+    MEMORY_STATE = ControlId(Section.MEMORY, 2)
+    MEMORY_RESULT = ControlId(Section.MEMORY, 3)
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,7 @@ class TransitionCommand(IntEnum):             # (4.1.8.1)
     STOP = 0
     RUN = 1
     GOTO_END = 5
+    READY = 8       # 엔진이 명령을 처리하면 이 값으로 바꾼다. 이때만 다음 명령을 받는다 (4.1.8.1.9)
 
 
 class TransitionStatus(IntEnum):              # (4.1.8.3)
@@ -122,8 +125,23 @@ class TransitionStatus(IntEnum):              # (4.1.8.3)
 
 
 class MemoryCommand(IntEnum):                 # (4.1.9.2)
+    READY = 0       # 명령이 아니라 "새 명령을 받을 수 있음" 표시. 보내기 전에 확인해야 한다
     LOAD = 1
     STORE = 2
+
+
+class MemoryState(IntEnum):                   # (4.1.9.3)
+    READY = 0
+    BUSY = 1
+    ERROR = 2
+
+
+class MemoryResult(IntEnum):                  # (4.1.9.4)
+    OK = 0
+    FAIL = 1
+    NOT_FOUND = 2
+    ILLEGAL_COMMAND = 3
+    ILLEGAL_VALUE = 4
 
 
 # --- 소스 번호 ---
@@ -145,6 +163,8 @@ TRANSITION_TYPES = {"Mix": 0, "Wipe": 1}                                # (4.1.3
 HDMI_OUTPUTS = {"PGM": 0, "PVW": 1, "PGM+DSK": 2, "PVW+DSK": 3, "MultiView": 4}   # (4.1.6.9)
 AUDIO_SOURCES = {"Follow": 0, "In 1": 1, "In 2": 2, "In 3": 3, "In 4": 4}       # (4.1.7.1)
 AUDIO_MODES = {"Off": 0, "Digital": 1, "Analog": 2}                              # (4.1.7.3)
+AUDIO_FOLLOW_VIDEO = 0
+AUDIO_MODE_ANALOG = 2       # 아날로그 모드에서는 입력 1~4 만 가능 (4.1.7.1 Note)
 MENU_KEYS = {"MENU": 1, "UP": 2, "DOWN": 3, "LEFT": 4, "RIGHT": 5, "ENTER": 6}
 
 SOURCE_NAMES = {value: name for name, value in SOURCES.items()}

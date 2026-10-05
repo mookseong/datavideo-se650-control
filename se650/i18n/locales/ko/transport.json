@@ -11,7 +11,6 @@
     "connected": "연결됨: {host}",
     "lost": "연결이 끊어졌습니다",
     "channel_ended": "{channel} 채널 수신 종료",
-    "closed_with_stats": "연결 종료 (명령 채널 null 응답: {null_replies}, 무시: {nulls_ignored})",
-    "null_flood": "스위처가 명령 채널 null 패킷에 응답하고 있습니다 (초당 {count}개). 스위처 보호를 위해 응답 속도를 제한합니다."
+    "closed_with_stats": "연결 종료 (명령 채널에서 받은 예상 밖 null 패킷: {nulls_received})"
   }
 }

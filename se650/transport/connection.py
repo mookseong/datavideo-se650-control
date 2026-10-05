@@ -39,7 +39,8 @@ class DvipConnection:
     def command_port(self):
         return self.realtime_port + 1 if self.realtime_port else None
 
-    def open(self, on_realtime_packet, on_command_packet, on_closed):
+    def open(self, on_realtime_packet, on_command_packet, on_closed, realtime_reply=None):
+        """realtime_reply(): 실시간 답장에 실을 payload (없으면 None -> null 답장)."""
         if self.realtime_port is None:
             self.realtime_port = request_realtime_port(
                 self.host, self._discovery_port, self._timeout, self._allowed_ports)
@@ -53,7 +54,8 @@ class DvipConnection:
         except OSError:
             rt_sock.close()
             raise
-        self._realtime = RealtimeChannel(rt_sock, "realtime", on_realtime_packet, self._handle_closed)
+        self._realtime = RealtimeChannel(rt_sock, "realtime", on_realtime_packet, self._handle_closed,
+                                         realtime_reply)
         self._command = CommandChannel(cmd_sock, "command", on_command_packet, self._handle_closed)
         self.connected = True
         self._command.start()
@@ -67,9 +69,7 @@ class DvipConnection:
 
     @property
     def diagnostics(self) -> dict:
-        command = self._command
-        return {"null_replies": getattr(command, "null_replies", 0),
-                "nulls_ignored": getattr(command, "nulls_ignored", 0)}
+        return {"nulls_received": getattr(self._command, "nulls_received", 0)}
 
     def close(self):
         was_connected = self.connected

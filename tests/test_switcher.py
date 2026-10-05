@@ -4,7 +4,8 @@ import time
 import unittest
 
 from se650.control import Switcher
-from se650.i18n import tr
+from se650.control.switcher import NotReadyError, UndocumentedCommandError
+from se650.i18n import LocalizedError, tr
 from se650.protocol.constants import Controls
 
 from .helpers import DeviceFixture, RecordingConnection, wait_for
@@ -15,16 +16,41 @@ def values_packet(*pairs, command=1):
     return struct.pack("<I", command) + body
 
 
+class QuickSwitcher(Switcher):
+    """명령 변환만 검사하는 단위 테스트용: Ready 대기 시간 0 (대기 규칙은 SwitcherReadyRuleTests 에서)."""
+    ENGINE_MIN_INTERVAL = 0
+    MEMORY_MIN_INTERVAL = 0
+    STATE_RETRY_COUNT = 0
+
+
+def name_reply(name):
+    raw = name.encode("utf-16le")
+    return struct.pack("<II", 3, len(raw) // 2) + raw
+
+
 class SwitcherUnitTests(unittest.TestCase):
     """RecordingConnection 으로 소켓 없이 검사."""
 
     def setUp(self):
         self.conn = RecordingConnection()
         self.changes = []
-        self.switcher = Switcher(self.conn, on_change=lambda: self.changes.append(1))
-        self.switcher.STATE_RETRY_COUNT = 0          # 재시도 스레드는 통합 테스트에서
+        self.switcher = QuickSwitcher(self.conn, on_change=lambda: self.changes.append(1))
         self.switcher.connect()
+        self.answer_input_names()
+        self.assertTrue(wait_for(lambda: not self.switcher._names_thread.is_alive()))
         self.conn.sent.clear()
+
+    def tearDown(self):
+        self.switcher.close()
+
+    def answer_input_names(self, names=("A", "B", "C", "D")):
+        """입력 이름 요청은 하나씩 나간다: 요청이 보이면 답하고 다음 요청을 기다린다."""
+        for index, name in enumerate(names, start=1):
+            self.assertTrue(wait_for(lambda: self.name_requests() == index), "이름 요청 %d 안 옴" % index)
+            self.conn.receive_command(name_reply(name))
+
+    def name_requests(self):
+        return sum(1 for p in self.conn.sent if p[:4] == b"\x09\x00\x00\x00")
 
     def last(self):
         return self.conn.sent[-1]
@@ -39,7 +65,7 @@ class SwitcherUnitTests(unittest.TestCase):
     def test_auto_runs_then_stops_while_running(self):
         self.switcher.auto()
         self.assertEqual(self.last()[-4:], b"\x01\x00\x00\x00")
-        self.conn.receive_realtime(values_packet((Controls.ME_STATE, 2)))
+        self.conn.receive_realtime(values_packet((Controls.ME_STATE, 2), (Controls.ME_COMMAND, 8)))
         self.switcher.auto()
         self.assertEqual(self.last()[-4:], b"\x00\x00\x00\x00")
 
@@ -65,10 +91,16 @@ class SwitcherUnitTests(unittest.TestCase):
         self.assertEqual(self.last(), bytes.fromhex("01000000 0f000500 02000000"))
         self.switcher.set_audio_source("In 1")
         self.assertEqual(self.last(), bytes.fromhex("01000000 00000600 01000000"))
+        self.conn.receive_realtime(values_packet((Controls.AUDIO_SOURCE, 1)))       # 장비가 반영
         self.switcher.set_audio_mode("Analog")
         self.assertEqual(self.last(), bytes.fromhex("01000000 02000600 02000000"))
 
     # --- 패널 버튼
+    def test_state_starts_at_zero(self):
+        """문서 3.2.3: 접속 전 상태 사본은 0. (None 이면 값이 0 인 항목을 영영 못 받는다)"""
+        fresh = Switcher(RecordingConnection()).state
+        self.assertEqual((fresh.pgm, fresh.pvw, fresh.transition_type, fresh.me.duration), (0, 0, 0, 0))
+
     def test_still_alternates_still_1_and_2(self):
         self.switcher.press_still("pgm")
         self.assertEqual(self.last(), bytes.fromhex("01000000 56000200 13000000"))       # Still 1 (19)
@@ -104,9 +136,22 @@ class SwitcherUnitTests(unittest.TestCase):
         self.switcher.toggle_logo()
         self.assertEqual(self.last()[4:12], bytes.fromhex("5b000200 00000000"))
 
-    def test_tbar_sends_wipe_level(self):
+    def test_tbar_rides_on_realtime_reply(self):
+        """T-바는 명령 패킷을 보내지 않고, 장비가 기다리는 실시간 답장에 실린다 (3.2.4.2)."""
         self.assertEqual(self.switcher.move_tbar(50), 50)
-        self.assertEqual(self.last(), bytes.fromhex("01000000 01000200 00004842"))
+        self.assertEqual(self.conn.sent, [])
+        self.assertEqual(self.conn.next_realtime_reply(), bytes.fromhex("00000000 01000200 00004842"))
+        self.assertIsNone(self.conn.next_realtime_reply())               # 다음 답장은 null
+
+    def test_tbar_coalesces_but_never_drops_completion(self):
+        for position in (10, 40, 70):
+            self.switcher.move_tbar(position)
+        self.switcher.move_tbar(100)                                     # 완료 (반드시 전달)
+        self.switcher.move_tbar(100 - 15)                                # 반대 방향으로 15%
+        replies = [self.conn.next_realtime_reply() for _ in range(3)]
+        self.assertEqual(replies[0][-4:], struct.pack("<f", 100.0))      # 70 은 100 으로 대체, 100 은 유지
+        self.assertEqual(replies[1][-4:], struct.pack("<f", 15.0))
+        self.assertIsNone(replies[2])
 
     def test_send_when_disconnected_raises(self):
         self.conn.close()
@@ -148,25 +193,70 @@ class SwitcherUnitTests(unittest.TestCase):
         self.assertEqual(self.switcher.state.pgm, 3)
         self.assertTrue(self.switcher.wait_ready(0))
 
-    def test_non_bus_values_do_not_mark_ready(self):
+    def test_any_realtime_packet_marks_ready(self):
+        """첫 실시간 패킷은 0 기준 변경분이라 PGM 이 0(Black) 이면 PGM 이 아예 없을 수 있다 (3.2.3)."""
         self.conn.receive_realtime(values_packet((Controls.ME_DURATION, 20)))
+        self.assertTrue(self.switcher.wait_ready(0))
+        self.assertEqual(self.switcher.state.pgm, 0)
+
+    def test_command_reply_without_bus_does_not_mark_ready(self):
+        self.conn.receive_command(values_packet((Controls.ME_DURATION, 20)))
         self.assertFalse(self.switcher.wait_ready(0))
 
     def test_command_reply_values(self):
         self.conn.receive_command(values_packet((Controls.PST_SRC, 2)))
         self.assertEqual(self.switcher.state.pvw, 2)
 
-    def test_input_names_matched_in_request_order(self):
-        self.switcher.request_input_names()
-        for name in ("A", "B", "C", "D", "extra"):
-            raw = name.encode("utf-16le")
-            self.conn.receive_command(struct.pack("<II", 3, len(raw) // 2) + raw)
+    def test_input_names_one_request_at_a_time(self):
         self.assertEqual(self.switcher.input_names, {1: "A", 2: "B", 3: "C", 4: "D"})
+        self.conn.sent.clear()
+        self.switcher.request_input_names()
+        self.assertTrue(wait_for(lambda: self.name_requests() == 1))
+        time.sleep(0.1)
+        self.assertEqual(self.name_requests(), 1, "응답 전에 다음 요청을 보내면 안 됨")
+        self.conn.receive_command(name_reply("X"))
+        self.assertTrue(wait_for(lambda: self.name_requests() == 2))
+
+    def test_unanswered_name_request_times_out_and_continues(self):
+        self.switcher.NAME_REPLY_TIMEOUT = 0.1
+        self.conn.sent.clear()
+        self.switcher.request_input_names()
+        self.assertTrue(wait_for(lambda: self.name_requests() == 4, 2.0))
+        self.assertTrue(wait_for(lambda: not self.switcher._names_thread.is_alive(), 2.0))   # 4번째도 시간 초과
+        self.conn.receive_command(name_reply("late"))                     # 포기한 요청의 늦은 응답은 무시
+        self.assertNotIn("late", self.switcher.input_names.values())
 
     def test_refresh_requests_state_and_names(self):
         self.switcher.refresh()
-        commands = [struct.unpack_from("<I", p)[0] for p in self.conn.sent]
-        self.assertEqual(commands, [0, 9, 9, 9, 9])
+        self.assertTrue(wait_for(lambda: len(self.conn.sent) >= 2))
+        self.assertEqual([struct.unpack_from("<I", p)[0] for p in self.conn.sent[:2]], [0, 9])
+
+    def test_refresh_mashing_sends_once_per_second(self):
+        for _ in range(5):
+            self.switcher.refresh()
+        gets = [p for p in self.conn.sent if p[:4] == b"\x00\x00\x00\x00"]
+        self.assertEqual(len(gets), 1)
+
+    def test_menu_refused_unless_allowed(self):
+        with self.assertRaises(UndocumentedCommandError):
+            self.switcher.press_menu("DOWN")
+        self.assertEqual(self.conn.sent, [])
+        self.switcher.allow_undocumented = True
+        self.switcher.press_menu("DOWN")
+        self.assertEqual(self.last(), bytes.fromhex("15000000 03000000"))
+
+    def test_analog_mode_rejects_follow_video(self):
+        self.conn.receive_realtime(values_packet((Controls.AUDIO_MODE, 2)))
+        with self.assertRaises(LocalizedError) as ctx:
+            self.switcher.set_audio_source("Follow")
+        self.assertEqual(ctx.exception.key, "control.error.analog_needs_input")
+        self.switcher.set_audio_source("In 2")
+        self.assertEqual(self.last()[-4:], struct.pack("<i", 2))
+
+    def test_analog_mode_rejected_while_following_video(self):
+        with self.assertRaises(LocalizedError):
+            self.switcher.set_audio_mode("Analog")            # 초기 오디오 소스 0 = 영상 연동
+        self.assertEqual(self.conn.sent, [])
 
     def test_drop_notifies(self):
         self.changes.clear()
@@ -183,6 +273,7 @@ class SwitcherIntegrationTests(unittest.TestCase):
         self.switcher = self.fx.switcher()
 
     def tearDown(self):
+        self.fx.assert_compliant(self)
         self.switcher.close()
         self.fx.stop()
 
@@ -255,11 +346,22 @@ class SwitcherIntegrationTests(unittest.TestCase):
 
     def test_keyer_program_only_then_cut_goes_off(self):
         self.connect()
-        self.switcher.press_keyer("dsk1", "pgm")
-        self.assertTrue(wait_for(lambda: self.fx.device.state[(2, 91)] == 1))
+        self.switcher.press_keyer("key1", "pgm")
+        self.assertTrue(wait_for(lambda: self.fx.device.state[(2, 19)] == 1))
         self.switcher.cut()
-        self.assertTrue(wait_for(lambda: not self.switcher.state.keyers["dsk1"].on))
-        self.assertFalse(self.switcher.state.keyers["dsk1"].preview)
+        self.assertTrue(wait_for(lambda: not self.switcher.state.keyers["key1"].on))
+        self.assertFalse(self.switcher.state.keyers["key1"].preview)
+
+    def test_dsk_is_driven_by_dsk_engine_not_me_cut(self):
+        """문서 4.1.3.5: DSK1_TRANS_ENABLE 은 'DSK 트랜지션'에 포함 -> M/E CUT 이 아니라 DSK CUT 으로 바뀐다."""
+        self.connect()
+        self.switcher.press_keyer("dsk1", "pvw")
+        self.assertTrue(wait_for(lambda: self.fx.device.state[(2, 127)] == 1))
+        self.switcher.cut()
+        time.sleep(0.2)
+        self.assertFalse(self.switcher.state.keyers["dsk1"].on)
+        self.switcher.dsk_cut()
+        self.assertTrue(wait_for(lambda: self.switcher.state.keyers["dsk1"].on))
 
     def test_refresh_pulls_silent_change(self):
         self.connect()
@@ -273,6 +375,68 @@ class SwitcherIntegrationTests(unittest.TestCase):
         self.assertTrue(wait_for(lambda: not self.switcher.connected, 3.0))
         with self.assertRaises(ConnectionError):
             self.switcher.set_program(1)
+
+
+class SwitcherReadyRuleTests(unittest.TestCase):
+    """문서 4.1.8.1.9 / 4.1.9.2: 장비가 Ready 일 때만 트랜지션/메모리 명령을 보낸다."""
+
+    def setUp(self):
+        self.conn = RecordingConnection()
+        self.switcher = Switcher(self.conn)
+        self.switcher.STATE_RETRY_COUNT = 0
+        self.switcher.NAME_REPLY_TIMEOUT = 0.01
+        self.switcher.connect()
+        wait_for(lambda: self.switcher._names_thread is not None and not self.switcher._names_thread.is_alive())
+        self.conn.sent.clear()
+
+    def tearDown(self):
+        self.switcher.close()
+
+    def commands(self, control):
+        prefix = struct.pack("<HH", control.number, control.section)
+        return [p for p in self.conn.sent if prefix in p]
+
+    def test_cut_mashing_sends_one_command(self):
+        self.switcher.cut()
+        for _ in range(5):
+            with self.assertRaises(NotReadyError):
+                self.switcher.cut()
+        self.assertEqual(len(self.commands(Controls.ME_COMMAND)), 1)
+
+    def test_next_command_after_device_reports_ready(self):
+        self.switcher.cut()
+        self.conn.receive_realtime(values_packet((Controls.ME_COMMAND, 5)))      # 아직 처리 전
+        time.sleep(self.switcher.ENGINE_MIN_INTERVAL + 0.02)
+        with self.assertRaises(NotReadyError):
+            self.switcher.cut()
+        self.conn.receive_realtime(values_packet((Controls.ME_COMMAND, 8)))      # Ready
+        self.switcher.cut()
+        self.assertEqual(len(self.commands(Controls.ME_COMMAND)), 2)
+
+    def test_engines_are_independent(self):
+        self.switcher.cut()
+        self.switcher.dsk_cut()                                                  # 다른 엔진은 막히지 않음
+        self.assertEqual(len(self.commands(Controls.DSK_COMMAND)), 1)
+
+    def test_memory_busy_blocks_next_command(self):
+        self.switcher.load_memory(1)
+        self.conn.receive_realtime(values_packet((Controls.MEMORY_COMMAND, 1), (Controls.MEMORY_STATE, 1)))
+        time.sleep(self.switcher.MEMORY_MIN_INTERVAL + 0.02)
+        with self.assertRaises(NotReadyError) as ctx:
+            self.switcher.load_memory(2)
+        self.assertEqual(ctx.exception.key, "control.error.memory_busy")
+        self.conn.receive_realtime(values_packet((Controls.MEMORY_COMMAND, 0), (Controls.MEMORY_STATE, 0)))
+        self.switcher.load_memory(2)
+        self.assertEqual(len(self.commands(Controls.MEMORY_COMMAND)), 2)
+
+    def test_memory_result_reported(self):
+        self.switcher.load_memory(7)
+        with self.assertLogs("se650.control", "WARNING") as logs:
+            self.conn.receive_realtime(values_packet((Controls.MEMORY_COMMAND, 1), (Controls.MEMORY_STATE, 1)))
+            self.conn.receive_realtime(values_packet((Controls.MEMORY_RESULT, 2), (Controls.MEMORY_STATE, 0),
+                                                     (Controls.MEMORY_COMMAND, 0)))
+        self.assertIn(tr("control.log.memory_not_found", slot=7, operation=tr("control.log.memory_load")),
+                      logs.output[0])
 
 
 if __name__ == "__main__":

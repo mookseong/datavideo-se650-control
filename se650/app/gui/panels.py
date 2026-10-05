@@ -8,6 +8,9 @@ from tkinter import ttk
 
 from ...i18n import available_languages, get_locale, tr
 from ...protocol.constants import AUDIO_MODES, AUDIO_SOURCES, HDMI_OUTPUTS, KEY_SOURCES, TransitionStatus
+
+_DEVICE_CHOICES = (("hdmi", "hdmi_out", HDMI_OUTPUTS), ("audio", "audio_source", AUDIO_SOURCES),
+                   ("audio_mode", "audio_mode", AUDIO_MODES))
 from . import theme
 from .widgets import ChoiceBox, translated_options
 
@@ -59,11 +62,12 @@ class ExtrasPanel(ttk.Labelframe):
     KEYER_SOURCES = (("key1", "app.extras.keyer_source"), ("pip", "app.extras.pip_source"),
                      ("dsk1", "app.extras.logo_source"))
 
-    def __init__(self, parent, run, settings, log):
+    def __init__(self, parent, run, settings, log, on_undocumented_toggle=None):
         super().__init__(parent, text=tr("app.extras.title"), padding=8)
         self._run = run
         self._settings = settings
         self._log = log
+        self._on_undocumented_toggle = on_undocumented_toggle or (lambda allowed: None)
 
         # 1열: FTB, 트랜지션 프레임
         column = ttk.Frame(self)
@@ -111,6 +115,12 @@ class ExtrasPanel(ttk.Labelframe):
         ttk.Button(column, text=tr("app.extras.save"), width=8, command=lambda: self._memory("store_memory")
                    ).grid(row=2, column=1, padx=4, pady=2)
 
+        # 아래 줄: 문서에 없는 명령 허용 (기본 꺼짐)
+        self.undocumented_var = tk.BooleanVar(value=settings["undocumented_menu"])
+        ttk.Checkbutton(self, text=tr("app.extras.undocumented_menu"), variable=self.undocumented_var,
+                        command=self._toggle_undocumented).grid(row=1, column=0, columnspan=4, sticky="w",
+                                                                 pady=(8, 0))
+
     def apply_duration(self):
         try:
             frames = int(self.duration_var.get())
@@ -130,6 +140,11 @@ class ExtrasPanel(ttk.Labelframe):
         combo.grid(row=row, column=1, padx=4, pady=2)
         return combo
 
+    def _toggle_undocumented(self):
+        allowed = bool(self.undocumented_var.get())
+        self._settings.set("undocumented_menu", allowed)
+        self._on_undocumented_toggle(allowed)
+
     def _memory(self, method_name):
         number = int(self.memory_var.get())
         self._settings.set("user_memory", number)
@@ -139,5 +154,12 @@ class ExtrasPanel(ttk.Labelframe):
         state = switcher.state if switcher else None
         fading = bool(state and (state.ftb.running or state.ftb.status == TransitionStatus.AT_END))
         self.ftb_button.configure(bg=theme.FTB_ACTIVE if fading else theme.FTB_IDLE)
-        if state and state.me.duration:
+        if not state:
+            return
+        if state.me.duration:
             self.duration_var.set(state.me.duration)
+        for attribute, state_field, table in _DEVICE_CHOICES:            # 장비의 실제 값을 표시
+            names_by_value = {value: name for name, value in table.items()}
+            value = getattr(state, state_field)
+            if value in names_by_value:
+                getattr(self, attribute).value = names_by_value[value]

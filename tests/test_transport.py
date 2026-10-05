@@ -97,57 +97,6 @@ class ConnectionTests(unittest.TestCase):
         self.assertTrue(wait_for(lambda: self.realtime))
         self.assertGreater(len(self.realtime[0]), 8)
 
-    def test_every_realtime_packet_answered_exactly_once(self):
-        """문서 3.2.5: 장비 패킷마다 답장 1개, 요청 없는 패킷은 보내지 않음."""
-        self.open()
-        wait_for(lambda: self.realtime)
-        for _ in range(5):
-            self.fx.device.push([(2, 86)])
-            time.sleep(0.03)
-        expected = 1 + 1 + 5            # 접속 직후 null + 첫 패킷 답장 + 푸시 5
-        self.assertTrue(wait_for(lambda: len(self.fx.device.realtime_replies) >= expected))
-        time.sleep(0.3)
-        self.assertEqual(len(self.fx.device.realtime_replies), expected)
-
-    def test_only_null_packets_on_realtime_port(self):
-        """문서 2.1.2: 실시간 포트에 명령 프로토콜을 쓰면 동기가 깨진다."""
-        self.open()
-        self.conn.send_command(struct.pack("<I", 0) + struct.pack("<HH", 86, 2))
-        time.sleep(0.3)
-        self.assertTrue(all(p == b"\x00\x00\x00\x00" for p in self.fx.device.realtime_replies))
-
-    def test_command_null_answered_exactly_once(self):
-        """명령 채널: 접속 인사 null 1 + 장비 null 에 대한 답장 1. 그 이상이면 핑퐁 버그."""
-        self.open()
-        self.assertTrue(wait_for(lambda: self.fx.device.command_nulls >= 2))
-        time.sleep(0.3)
-        self.assertEqual(self.fx.device.command_nulls, 2)
-
-    def test_no_null_ping_pong_with_echoing_device(self):
-        """장비가 null 에 응답해도 핑퐁이 생기지 않는다 (고치기 전: 초당 약 9만 패킷)."""
-        self.fx.device.command_null_mode = "echo"
-        self.open()
-        time.sleep(1.0)
-        self.assertLess(self.fx.device.command_nulls, 15)
-
-    def test_null_flood_from_device_is_rate_limited_and_reported(self):
-        self.fx.device.command_null_mode = "spam"
-        with self.assertLogs("se650.transport", "WARNING") as logs:
-            self.open()
-            time.sleep(0.8)
-        self.assertLessEqual(self.fx.device.command_nulls, 1 + 1 + 6)     # 인사 + 초당 최대 10회 x 0.5초
-        self.assertTrue(any("null" in line for line in logs.output))
-
-    def test_close_reports_null_statistics(self):
-        self.fx.device.command_null_mode = "echo"
-        self.open()
-        time.sleep(0.3)
-        with self.assertLogs("se650.transport", "INFO") as logs:
-            self.conn.close()
-        ignored = self.conn.diagnostics["nulls_ignored"]
-        self.assertTrue(1 <= ignored <= 3, ignored)          # 무시 >= 1 이면 "장비가 null 에 응답하는 기기"라는 증거
-        self.assertTrue(any("%d" % ignored in line for line in logs.output), logs.output)
-
     def test_repeated_connect_disconnect_releases_device_sockets(self):
         """연결/해제를 반복해도 장비 쪽에 열린 연결이 남지 않는다 (채널 반납)."""
         self.conn.close()
@@ -158,10 +107,49 @@ class ConnectionTests(unittest.TestCase):
             self.assertTrue(wait_for(lambda: all(c.fileno() == -1 for c in self.fx.device._clients)),
                             "장비 쪽 소켓이 닫히지 않음")
 
+    # ---------------------------------------------------------------- 실시간 채널 규칙 (3.2)
+    def test_realtime_reply_count_matches_device_packets(self):
+        """장비 패킷마다 답장 정확히 1개 (3.2.5). 장비보다 먼저 보내지 않는다 (3.2.4)."""
+        self.open()
+        time.sleep(0.5)                                  # 50Hz -> 약 25 패킷
+        session = self.fx.device._sessions[0]
+        self.assertGreater(session.sent, 10)
+        self.assertIn(session.sent - session.replies, (0, 1))      # 1 = 마지막 패킷의 답장이 오는 중
+        self.fx.assert_compliant(self)
+
+    def test_realtime_replies_are_null_without_payload(self):
+        self.open()
+        time.sleep(0.2)
+        self.assertTrue(all(p == b"\x00\x00\x00\x00" for p in self.fx.device.realtime_replies))
+
+    def test_realtime_reply_carries_provided_payload_once(self):
+        payloads = [struct.pack("<I", 0) + struct.pack("<HHi", 86, 2, 4)]
+        self.conn.open(self.realtime.append, self.command.append, self.closed.set,
+                       realtime_reply=lambda: payloads.pop() if payloads else None)
+        self.assertTrue(wait_for(lambda: self.fx.device.state[(2, 86)] == 4))     # 답장에 실은 값 적용 (3.2.4.2)
+        time.sleep(0.2)
+        self.assertEqual(sum(1 for p in self.fx.device.realtime_replies if len(p) > 4), 1)
+        self.fx.assert_compliant(self)
+
+    # ---------------------------------------------------------------- 명령 채널 규칙 (2.2)
+    def test_no_null_packets_sent_on_command_channel(self):
+        """문서에 없는 null 을 명령 채널로 보내지 않는다 (예전: 접속 시 빈 GET)."""
+        self.open()
+        time.sleep(0.3)
+        self.assertEqual(self.fx.device.command_nulls, 0)
+
+    def test_nulls_from_device_are_not_answered(self):
+        """장비가 null 을 쏟아내도 응답하지 않는다 -> 핑퐁/부하 불가능."""
+        self.fx.device.command_null_mode = "spam"
+        self.open()
+        time.sleep(0.7)
+        self.assertEqual(self.fx.device.command_nulls, 0)
+        self.assertGreater(self.conn.diagnostics["nulls_received"], 0)
+
     def test_send_command_reaches_command_port(self):
         self.open()
-        self.conn.send_command(struct.pack("<II", 0x15, 3))
-        self.assertTrue(wait_for(lambda: self.fx.device.menu_keys == [3]))
+        self.conn.send_command(struct.pack("<I", 1) + struct.pack("<HHi", 87, 2, 3))
+        self.assertTrue(wait_for(lambda: self.fx.device.state[(2, 87)] == 3))
 
     def test_send_before_open_raises(self):
         with self.assertRaises(NotConnectedError) as ctx:

@@ -60,6 +60,10 @@ class DeviceFixture:
             return self.switcher(on_change, retry_interval)
         return make
 
+    def assert_compliant(self, test):
+        """가짜 장비가 기록한 문서 규칙 위반이 없어야 한다."""
+        test.assertEqual(self.device.violations, [], "protocol violations")
+
     def stop(self):
         self.device.stop()
 
@@ -73,8 +77,9 @@ class RecordingConnection:
         self.sent = []
         self._callbacks = None
 
-    def open(self, on_realtime_packet, on_command_packet, on_closed):
+    def open(self, on_realtime_packet, on_command_packet, on_closed, realtime_reply=None):
         self._callbacks = (on_realtime_packet, on_command_packet, on_closed)
+        self._realtime_reply = realtime_reply or (lambda: None)
         self.connected = True
 
     def send_command(self, payload):
@@ -91,6 +96,10 @@ class RecordingConnection:
 
     def receive_command(self, payload):
         self._callbacks[1](payload)
+
+    def next_realtime_reply(self):
+        """장비가 실시간 패킷을 보냈을 때 클라이언트가 실을 답장 (None = null)."""
+        return self._realtime_reply()
 
     def drop(self):
         self.connected = False

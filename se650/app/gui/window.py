@@ -81,7 +81,7 @@ class MainWindow:
         self.connection_bar.grid(row=0, column=0, sticky="ew")
         self.device = DevicePanel(self.root, self.run, self.log)
         self.device.grid(row=1, column=0, sticky="ew", padx=10)
-        self.extras = ExtrasPanel(self.root, self.run, self.settings, self.log)
+        self.extras = ExtrasPanel(self.root, self.run, self.settings, self.log, self._set_undocumented)
         self.extras.grid(row=2, column=0, sticky="ew", padx=10, pady=(8, 6))
 
         self.log_box = scrolledtext.ScrolledText(self.root, height=7, bg=theme.LOG_BACKGROUND, fg=theme.LOG_TEXT,
@@ -140,6 +140,7 @@ class MainWindow:
         self._pending_connect = None
         # 접속 도중 도착하는 상태 콜백도 처리되도록 connect() 전에 self.switcher 를 할당한다
         switcher = self._switcher_factory(host, on_change=lambda: self._events.put(("state", None)))
+        switcher.allow_undocumented = self.settings["undocumented_menu"]
         self.switcher = switcher
         threading.Thread(target=self._connect_worker, args=(switcher,), name="connect", daemon=True).start()
 
@@ -149,6 +150,11 @@ class MainWindow:
             self._last_disconnect = time.monotonic()
         self.switcher = None
         self._show_status("disconnected")
+        self._refresh_panels()
+
+    def _set_undocumented(self, allowed: bool):
+        if self.switcher:
+            self.switcher.allow_undocumented = allowed
         self._refresh_panels()
 
     def refresh_from_device(self):

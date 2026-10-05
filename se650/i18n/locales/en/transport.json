@@ -11,7 +11,6 @@
     "connected": "Connected: {host}",
     "lost": "Connection lost",
     "channel_ended": "{channel} channel stopped receiving",
-    "closed_with_stats": "Connection closed (command-channel null replies: {null_replies}, ignored: {nulls_ignored})",
-    "null_flood": "The switcher is answering null packets on the command channel ({count}/s). Replies are rate-limited to protect the switcher."
+    "closed_with_stats": "Connection closed (unexpected null packets on the command channel: {nulls_received})"
   }
 }

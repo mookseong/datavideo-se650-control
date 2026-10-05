@@ -1,11 +1,20 @@
 {
   "error": {
-    "invalid_bus": "bus 는 'pgm' 또는 'pvw' 여야 합니다: {bus}"
+    "invalid_bus": "bus 는 'pgm' 또는 'pvw' 여야 합니다: {bus}",
+    "engine_busy": "스위처가 이전 트랜지션 명령을 처리 중입니다. 잠시 후 다시 누르세요.",
+    "memory_busy": "스위처가 유저 메모리 작업을 처리 중입니다. 끝난 뒤 다시 누르세요.",
+    "undocumented_command": "원격 메뉴 키는 SE-650 프로토콜 문서에 없는 명령을 써서 기본으로 꺼져 있습니다. 위험을 감수한다면 추가 기능에서 켤 수 있습니다.",
+    "analog_needs_input": "아날로그 오디오 모드에서는 입력 1~4 만 쓸 수 있습니다 (영상 연동 불가)."
   },
   "log": {
     "input_name": "입력 {number} 이름: {name}",
     "state_retry": "상태 응답 없음, 재요청 ({attempt}/{total})",
     "keyer_sent": "[키어 송신 {bus} 버튼] {keyer} ON={on} TRANS={trans} -> PVW표시={preview}",
-    "keyer_received": "[키어 수신] {keyer} ON={on} TRANS={trans} -> PVW표시={preview}"
+    "keyer_received": "[키어 수신] {keyer} ON={on} TRANS={trans} -> PVW표시={preview}",
+    "memory_load": "불러오기",
+    "memory_store": "저장",
+    "memory_ok": "유저 메모리 {slot} {operation}: 완료",
+    "memory_not_found": "유저 메모리 {slot} {operation}: 해당 번호에 저장된 메모리가 없습니다",
+    "memory_failed": "유저 메모리 {slot} {operation}: 실패 (결과 코드 {result})"
   }
 }
