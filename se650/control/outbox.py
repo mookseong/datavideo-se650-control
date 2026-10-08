@@ -23,6 +23,11 @@ class RealtimeOutbox:
             else:
                 queue.append((value, must_deliver))
 
+    def clear(self, control):
+        """아직 안 보낸 값을 버린다 (예: CUT/AUTO 를 보내기 직전의 T-바 값)."""
+        with self._lock:
+            self._queues.pop(control, None)
+
     def take(self) -> list:
         """이번 필드 답장에 실을 [(control, value), ...]"""
         with self._lock:

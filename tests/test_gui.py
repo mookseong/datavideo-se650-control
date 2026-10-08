@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 
-from .helpers import DeviceFixture
+from .helpers import DeviceFixture, wait_for
 
 try:
     import tkinter as tk
@@ -157,6 +157,148 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.lit("pgm"), [])
         self.assertEqual(self.window.connection_bar.connect_button.cget("text"), tr("app.connection.connect"))
         self.connect()
+
+    # ---------------------------------------------------------------- 연결 누수 (검토 1번)
+    def press_enter_in_ip(self, times):
+        entry = [w for w in self.window.connection_bar.winfo_children() if w.winfo_class() == "TEntry"][0]
+        self.root.update()
+        entry.focus_force()
+        self.root.update()
+        for _ in range(times):
+            entry.event_generate("<Return>", when="now")
+            self.root.update()
+        self.assertNotEqual(self.window._status[0], "disconnected", "Enter 가 전달되지 않음 (테스트 오류)")
+
+    def test_enter_mashing_while_connecting_opens_one_connection(self):
+        self.press_enter_in_ip(4)
+        self.assertTrue(self.pump_until(lambda: self.window._status[0] == "connected", 4))
+        self.pump(0.8)
+        self.assertEqual(self.fx.device.open_sessions, 1)
+        self.assertEqual(self.fx.device.realtime_connections, 1)
+
+    def test_enter_mashing_during_reconnect_delay_opens_one_connection(self):
+        self.connect()
+        self.window.toggle_connection()
+        self.press_enter_in_ip(4)
+        self.assertTrue(self.pump_until(lambda: self.window._status[0] == "connected", 5))
+        self.pump(0.8)
+        self.assertEqual(self.fx.device.open_sessions, 1)
+        self.assertEqual(self.fx.device.realtime_connections, 2)        # 처음 + 재연결 1번
+
+    def test_enter_while_connected_does_not_disconnect(self):
+        self.connect()
+        self.press_enter_in_ip(3)
+        self.pump(0.3)
+        self.assertEqual(self.window._status[0], "connected")
+        self.assertEqual(self.fx.device.realtime_connections, 1)
+
+    def test_disconnect_closes_device_session(self):
+        self.connect()
+        self.window.toggle_connection()
+        self.assertTrue(wait_for(lambda: self.fx.device.open_sessions == 0, 2))
+
+    # ---------------------------------------------------------------- 키보드 (검토 6번)
+    def pvw_commands(self):
+        return [p for p in self.fx.device.commands_received if p[4:8] == bytes.fromhex("57000200")]
+
+    def test_held_key_sends_once(self):
+        """키를 누르고 있으면 OS 가 자동 반복을 보낸다 -> 한 번만 보낸다 (Windows 식: 놓기 없이 반복)."""
+        self.connect()
+        before = len(self.pvw_commands())
+        widget = self.window.device.cut_auto.auto_button
+        for _ in range(15):
+            self.window._on_key(FakeKeyEvent("3", widget))
+        self.pump(0.3)
+        self.assertEqual(len(self.pvw_commands()) - before, 1)
+
+    def test_x11_style_autorepeat_ignored_but_real_presses_count(self):
+        self.connect()
+        before = len(self.pvw_commands())
+        widget = self.window.device.cut_auto.auto_button
+        self.window._on_key(FakeKeyEvent("4", widget))
+        for _ in range(5):                                    # X11 자동 반복: 놓기+누르기 쌍이 즉시
+            self.window._on_key_release(FakeKeyEvent("4", widget))
+            self.window._on_key(FakeKeyEvent("4", widget))
+        self.window._on_key_release(FakeKeyEvent("4", widget))
+        self.pump(0.1)                                        # 정말로 놓음
+        self.window._on_key(FakeKeyEvent("3", widget))        # 새로 누름
+        self.pump(0.3)
+        self.assertEqual(len(self.pvw_commands()) - before, 2)
+
+    def test_buttons_never_take_keyboard_focus(self):
+        """버튼이 포커스를 가지면 Space 가 그 버튼(예: 메모리 저장)과 CUT 을 함께 누른다."""
+        def walk(widget):
+            yield widget
+            for child in widget.winfo_children():
+                yield from walk(child)
+        buttons = [w for w in walk(self.root) if w.winfo_class() in ("Button", "TButton", "Checkbutton", "TCheckbutton")]
+        self.assertGreater(len(buttons), 30)
+        self.assertEqual([str(b) for b in buttons if str(b.cget("takefocus")) not in ("0", "False")], [])
+
+    # ---------------------------------------------------------------- 메모리 (검토 2번)
+    def memory_commands(self):
+        return [p for p in self.fx.device.commands_received
+                if p[:4] == b"\x01\x00\x00\x00" and bytes.fromhex("01000800") in p]     # SET 만 (GET 제외)
+
+    def test_store_to_boot_slot_asks_first(self):
+        self.connect()
+        answers = []
+        self.window.extras._confirm = lambda title, message: answers.append(title) or False
+        self.window.extras.memory_var.set(0)
+        self.window.extras._memory("store_memory")
+        self.pump(0.3)
+        self.assertEqual(len(answers), 1)
+        self.assertEqual(self.memory_commands(), [])                     # 아니오 -> 보내지 않음
+        self.window.extras._confirm = lambda title, message: True
+        self.window.extras._memory("store_memory")
+        self.assertTrue(self.pump_until(lambda: len(self.memory_commands()) == 1))
+
+    def test_memory_outside_range_not_sent(self):
+        self.connect()
+        for value in (1000, -1):
+            self.window.extras.memory_var.set(value)
+            self.window.extras._memory("store_memory")
+            self.window.extras._memory("load_memory")
+        self.pump(0.3)
+        self.assertEqual(self.memory_commands(), [])
+        self.assertIn("0", self.log_text())
+
+    def test_cancel_while_waiting_to_reconnect(self):
+        """연결 중에는 버튼이 '취소'. 누르면 대기 중인 연결을 취소한다 (검토2 8번)."""
+        self.connect()
+        self.window.toggle_connection()
+        self.window.connect()                                    # 재연결 대기(1.5초) 중
+        self.pump(0.1)
+        self.assertEqual(self.window.connection_bar.connect_button.cget("text"), tr("app.connection.cancel"))
+        self.window.toggle_connection()                          # 취소
+        self.pump(2.0)
+        self.assertEqual(self.window._status[0], "disconnected")
+        self.assertEqual(self.fx.device.realtime_connections, 1)  # 새 연결 없음
+        self.connect()                                           # 다시 연결 가능
+
+    def test_factory_error_does_not_lock_connect_button(self):
+        good = self.window._switcher_factory
+
+        def bad(host, on_change=None):
+            raise ValueError("bad port")
+        self.window._switcher_factory = bad
+        self.window.connect()
+        self.pump(0.2)
+        self.assertEqual(self.window._status[0], "failed")
+        self.window._switcher_factory = good
+        self.connect()
+
+    def test_focus_loss_forgets_held_keys(self):
+        """키를 누른 채 다른 창으로 가면 놓기가 오지 않는다 -> 그 단축키가 영구히 막히면 안 된다 (검토2 9번)."""
+        self.connect()
+        widget = self.window.device.cut_auto.auto_button
+        before = len(self.pvw_commands())
+        self.window._on_key(FakeKeyEvent("3", widget))
+        self.window._forget_held_keys()                          # FocusOut
+        self.window._on_key(FakeKeyEvent("4", widget))
+        self.window._on_key(FakeKeyEvent("3", widget))
+        self.pump(0.3)
+        self.assertEqual(len(self.pvw_commands()) - before, 3)
 
     def test_reconnect_waits_after_disconnect(self):
         """해제 직후 재연결은 스위처가 이전 채널을 정리하도록 잠시 기다렸다가 연결한다."""

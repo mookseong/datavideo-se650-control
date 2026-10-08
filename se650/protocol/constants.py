@@ -176,14 +176,39 @@ class UnknownChoiceError(LocalizedError, ValueError):
 
 
 def lookup(table: dict, value) -> int:
-    """'In 2', 'in2', '2', 2 같은 입력을 표의 값으로 바꾼다."""
-    if isinstance(value, int):
-        return value
-    text = str(value).strip()
-    if text.isdigit():
-        return int(text)
-    wanted = text.lower().replace(" ", "")
+    """'In 2', 'in2', '2', 2 같은 입력을 표의 값으로 바꾼다.
+
+    번호로 줘도 표에 있는 값만 받는다. 문서에 없는 값(예: 소스 99, 'Not used' 5~16)은 장비로 보내지 않는다.
+    """
+    allowed = set(table.values())
+    if isinstance(value, bool):
+        value = int(value)
+    if isinstance(value, int) or str(value).strip().isdigit():
+        number = int(value)
+        if number in allowed:
+            return number
+        raise UnknownChoiceError("protocol.error.unknown_choice", value=repr(value), choices=", ".join(table))
+    wanted = str(value).strip().lower().replace(" ", "")
     for name, number in table.items():
         if name.lower().replace(" ", "") == wanted:
             return number
     raise UnknownChoiceError("protocol.error.unknown_choice", value=repr(value), choices=", ".join(table))
+
+
+class OutOfRangeError(LocalizedError, ValueError):
+    pass
+
+
+def check_range(name: str, value, low: int, high: int) -> int:
+    number = int(value)
+    if not low <= number <= high:
+        raise OutOfRangeError("protocol.error.out_of_range", name=name, value=number, low=low, high=high)
+    return number
+
+
+# 문서에 범위가 있는 값
+WIPE_PATTERN_RANGE = (1, 32)              # 4.1.3.1.1
+USER_MEMORY_RANGE = (0, 999)              # 4.1.9.1 (1000 = 시스템 메모리, 쓰면 안 됨)
+BOOT_MEMORY_SLOT = 0                      # 4.1.9.1: 부팅 때마다 불러오는 메모리 -> 저장 전 확인 필요
+# 문서에 범위가 없어 정한 값 (4.1.8.4 는 "프레임 단위"라고만 함)
+DURATION_RANGE = (1, 999)

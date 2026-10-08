@@ -3,7 +3,7 @@ import itertools
 import unittest
 
 from se650.control.state import STATE_CONTROLS, KeyerState, SwitcherState
-from se650.control.gates import ReadyGate
+from se650.control.ready import ReadyTracker
 from se650.control.outbox import RealtimeOutbox
 from se650.control.tbar import TBarTracker
 from se650.protocol.codec import ControlValue
@@ -124,28 +124,45 @@ class TBarTests(unittest.TestCase):
         self.assertEqual(tbar.level_for(140), 100)
 
 
-class ReadyGateTests(unittest.TestCase):
+class ReadyTrackerTests(unittest.TestCase):
+    """보낸 명령의 처리 확인 (4.1.8.1.9, 4.1.9.2). 확인 전에는 절대 다음 명령을 허용하지 않는다."""
+
     def setUp(self):
         self.now = [0.0]
-        self.gate = ReadyGate(min_interval=0.1, timeout=1.0, clock=lambda: self.now[0])
+        self.tracker = ReadyTracker(first_check=0.1, interval=0.2, max_checks=3, clock=lambda: self.now[0])
+        self.tracker.mark_sent(get_seq=5)
 
-    def test_first_command_follows_device(self):
-        self.assertTrue(self.gate.can_send(True))
-        self.assertFalse(self.gate.can_send(False))
+    def test_working_then_ready_completes(self):
+        self.assertFalse(self.tracker.observe(working=False, ready=True, trusted=False))   # 처리 전 값일 수 있음
+        self.assertTrue(self.tracker.pending)
+        self.tracker.observe(working=True, ready=False, trusted=False)
+        self.assertTrue(self.tracker.observe(working=False, ready=True, trusted=False))
+        self.assertFalse(self.tracker.pending)
 
-    def test_min_interval_even_if_device_says_ready(self):
-        self.gate.mark_sent()
-        self.now[0] = 0.05
-        self.assertFalse(self.gate.can_send(True))
+    def test_trusted_ready_completes_without_seeing_work(self):
+        """8 -> 5 -> 8 이 한 필드 안이면 실시간으로 안 보인다 -> 명령 뒤 GET 응답이 Ready 면 완료."""
+        self.assertTrue(self.tracker.observe(working=False, ready=True, trusted=True))
+
+    def test_check_schedule_and_give_up_never_unblocks(self):
+        self.assertFalse(self.tracker.check_due())
         self.now[0] = 0.1
-        self.assertTrue(self.gate.can_send(True))
+        self.assertTrue(self.tracker.check_due())
+        self.assertFalse(self.tracker.check_due())                   # 간격 전
+        for t in (0.31, 0.52):
+            self.now[0] = t
+            self.assertTrue(self.tracker.check_due())
+        self.now[0] = 10.0
+        self.assertFalse(self.tracker.check_due())                   # 횟수 소진
+        self.assertTrue(self.tracker.gave_up)
+        self.assertTrue(self.tracker.pending)                        # 포기해도 막힌 채 (예전엔 그냥 보냈다)
 
-    def test_waits_for_ready_then_times_out(self):
-        self.gate.mark_sent()
-        self.now[0] = 0.5
-        self.assertFalse(self.gate.can_send(False))
-        self.now[0] = 1.0
-        self.assertTrue(self.gate.can_send(False))            # 응답이 없어도 영원히 잠기지 않음
+    def test_reset_allows_new_checks(self):
+        self.now[0] = 10.0
+        for _ in range(3):
+            self.tracker.check_due()
+            self.now[0] += 1
+        self.tracker.reset()
+        self.assertTrue(self.tracker.check_due())
 
 
 class RealtimeOutboxTests(unittest.TestCase):

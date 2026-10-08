@@ -4,13 +4,17 @@
     "discovery_error_reply": "The switcher rejected the port request: {reply}",
     "no_free_port": "No free connection channel on the switcher (the control panel + up to 3 PCs). Close other apps; if you just disconnected, wait a few seconds and try again. If it persists, the switcher may be holding stale channels and needs a restart.",
     "unknown_port": "Unexpected port number in reply: {port}",
-    "not_connected": "Not connected"
+    "not_connected": "Not connected",
+    "cancelled": "Connection cancelled"
   },
   "log": {
     "ports": "Real-time port {realtime} / command port {command}",
     "connected": "Connected: {host}",
     "lost": "Connection lost",
     "channel_ended": "{channel} channel stopped receiving",
-    "closed_with_stats": "Connection closed (unexpected null packets on the command channel: {nulls_received})"
+    "closed_with_stats": "Connection closed (unexpected null packets on the command channel: {nulls_received})",
+    "silent": "No packets from the switcher on the {channel} channel for 3 seconds - treating the connection as lost",
+    "bad_frame": "Corrupted packet on the {channel} channel ({error}) - closing the connection",
+    "handler_error": "Unexpected error while handling a {channel} packet - closing the connection"
   }
 }

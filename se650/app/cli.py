@@ -9,7 +9,14 @@ READY_TIMEOUT = 2.0
 SETTLE_TIME = 0.3
 
 
-def _commands():
+ALLOW_UNDOCUMENTED_FLAG = "--allow-undocumented"
+CONFIRM_BOOT_SLOT_FLAG = "--confirm-boot-slot"
+# 현재 상태를 보고 반대로 바꾸는 명령: 상태를 못 받았으면 엉뚱하게 동작하므로 실행하지 않는다
+# + 처리 확인이 필요한 명령(트랜지션, 메모리): 상태 없이는 장비가 Ready 인지 알 수 없다 (4.1.8.1.9, 4.1.9.2)
+STATE_DEPENDENT = {"auto", "dskauto", "ftb", "key1", "pip", "dsk1", "cut", "dskcut", "load", "save"}
+
+
+def _commands(flags):
     """명령어 -> (필요 인수 개수, 실행 함수(switcher, args))"""
     return {
         "pgm": (1, lambda sw, a: sw.set_program(a[0])),
@@ -28,16 +35,15 @@ def _commands():
         "audio": (1, lambda sw, a: sw.set_audio_source(" ".join(a))),
         "amode": (1, lambda sw, a: sw.set_audio_mode(a[0])),
         "load": (1, lambda sw, a: sw.load_memory(a[0])),
-        "save": (1, lambda sw, a: sw.store_memory(a[0])),
-        "menu": (1, _press_menu),
+        "save": (1, lambda sw, a: sw.store_memory(a[0], confirm_boot_slot=CONFIRM_BOOT_SLOT_FLAG in flags)),
+        "menu": (1, lambda sw, a: _press_menu(sw, a, ALLOW_UNDOCUMENTED_FLAG in flags)),
         "status": (0, lambda sw, a: None),
     }
 
 
-def _press_menu(switcher, args):
-    """CLI 에서 menu 를 직접 입력한 것은 명시적 허용으로 본다 (문서에 없는 명령임을 경고)."""
-    print(tr("app.cli.undocumented_warning"))
-    switcher.allow_undocumented = True
+def _press_menu(switcher, args, allowed):
+    """문서에 없는 명령: --allow-undocumented 를 직접 붙였을 때만."""
+    switcher.allow_undocumented = allowed
     switcher.press_menu(args[0])
 
 
@@ -49,7 +55,9 @@ def describe(switcher) -> str:
 
 
 def run_cli(argv, switcher_factory=open_switcher, out=print) -> int:
-    commands = _commands()
+    flags = {a for a in argv if a.startswith("--")}
+    argv = [a for a in argv if not a.startswith("--")]
+    commands = _commands(flags)
     if len(argv) < 2 or argv[1].lower() not in commands:
         out(tr("app.cli.usage"))
         return 1
@@ -60,11 +68,22 @@ def run_cli(argv, switcher_factory=open_switcher, out=print) -> int:
         return 1
 
     switcher = switcher_factory(host)
-    switcher.connect()
+    try:
+        switcher.connect()
+    except Exception as error:      # noqa: BLE001 - 연결 실패는 메시지로
+        out(tr("app.cli.error", error=error))
+        return 2
     try:
         if not switcher.wait_ready(READY_TIMEOUT):
             out(tr("app.cli.no_state", seconds=int(READY_TIMEOUT)))
-        action(switcher, args)
+            if name in STATE_DEPENDENT:
+                out(tr("app.cli.needs_state"))
+                return 3
+        try:
+            action(switcher, args)
+        except Exception as error:      # noqa: BLE001 - 거부된 명령(범위, 처리 중 등)은 메시지로
+            out(tr("app.cli.error", error=error))
+            return 4
         time.sleep(SETTLE_TIME)
         out(describe(switcher))
     finally:

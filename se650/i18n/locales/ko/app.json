@@ -6,7 +6,8 @@
     "disconnect": "연결 해제",
     "refresh": "새로고침",
     "auto_connect": "시작 시 자동 연결",
-    "language": "언어"
+    "language": "언어",
+    "cancel": "취소"
   },
   "status": {
     "disconnected": "● 연결 안 됨",
@@ -56,7 +57,9 @@
     "memory": "유저 메모리",
     "load": "불러오기",
     "save": "저장",
-    "undocumented_menu": "원격 메뉴 키 허용 (프로토콜 문서에 없는 명령)"
+    "undocumented_menu": "원격 메뉴 키 허용 (프로토콜 문서에 없는 명령)",
+    "boot_slot_title": "부팅 메모리를 덮어쓸까요?",
+    "boot_slot_confirm": "유저 메모리 0 은 SE-650 이 켜질 때마다 불러오는 메모리입니다. 여기에 저장하면 전원을 다시 켰을 때의 상태가 바뀝니다.\n\n현재 상태를 메모리 0 에 저장할까요?"
   },
   "choice": {
     "source": {
@@ -104,12 +107,14 @@
     "connect_failed": "연결 실패: {error}",
     "frames_not_number": "프레임 수는 숫자여야 합니다",
     "language_changed": "언어: {name}",
-    "reset_unsupported": "RESET 은 실제 패널의 메뉴 키라서 네트워크로는 누를 수 없습니다."
+    "reset_unsupported": "RESET 은 실제 패널의 메뉴 키라서 네트워크로는 누를 수 없습니다.",
+    "memory_not_number": "유저 메모리는 0~999 사이의 숫자여야 합니다"
   },
   "cli": {
-    "usage": "사용법: python se650_control.py [--lang en|ko] <IP> <명령> [인수]\n  pgm <src> | pvw <src>        소스 선택 (BKG, 1~4, Still 1, Still 2, Black 또는 번호)\n  auto | cut                   M/E 트랜지션\n  dskauto | dskcut             DSK 트랜지션\n  ftb                          페이드 투 블랙\n  type mix|wipe                트랜지션 타입\n  dur <frames> [me|dsk|ftb]    트랜지션 길이\n  key1|pip|dsk1 pgm|pvw        키어 버튼\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"~\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          유저 메모리\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       현재 상태 출력",
+    "usage": "사용법: python se650_control.py [--lang en|ko] <IP> <명령> [인수]\n  pgm <src> | pvw <src>        소스 선택 (BKG, 1~4, Still 1, Still 2, Black 또는 번호)\n  auto | cut                   M/E 트랜지션\n  dskauto | dskcut             DSK 트랜지션\n  ftb                          페이드 투 블랙\n  type mix|wipe                트랜지션 타입\n  dur <frames> [me|dsk|ftb]    트랜지션 길이\n  key1|pip|dsk1 pgm|pvw        키어 버튼\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"~\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          유저 메모리\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       현재 상태 출력\n  옵션: --lang en|ko, --allow-undocumented (menu), --confirm-boot-slot (save 0)",
     "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | 입력이름: {names}",
     "no_state": "[warn] {seconds}초 동안 상태 응답이 없습니다",
-    "undocumented_warning": "[warn] 'menu' 는 SE-650 프로토콜 문서에 없는 명령을 사용합니다."
+    "error": "보내지 않음: {error}",
+    "needs_state": "이 명령은 스위처의 현재 상태에 따라 동작하는데 상태를 받지 못했습니다. 보내지 않았습니다."
   }
 }

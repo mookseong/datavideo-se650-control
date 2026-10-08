@@ -6,7 +6,8 @@
     "disconnect": "Disconnect",
     "refresh": "Refresh",
     "auto_connect": "Connect on start",
-    "language": "Language"
+    "language": "Language",
+    "cancel": "Cancel"
   },
   "status": {
     "disconnected": "● Not connected",
@@ -56,7 +57,9 @@
     "memory": "User memory",
     "load": "Load",
     "save": "Save",
-    "undocumented_menu": "Allow remote menu keys (not in the protocol document)"
+    "undocumented_menu": "Allow remote menu keys (not in the protocol document)",
+    "boot_slot_title": "Overwrite boot memory?",
+    "boot_slot_confirm": "User memory 0 is loaded every time the SE-650 starts. Saving here changes how the switcher comes up after a power cycle.\n\nSave the current state to memory 0?"
   },
   "choice": {
     "source": {
@@ -104,12 +107,14 @@
     "connect_failed": "Connection failed: {error}",
     "frames_not_number": "Frame count must be a number",
     "language_changed": "Language: {name}",
-    "reset_unsupported": "RESET is a menu key on the hardware panel and can't be pressed over the network."
+    "reset_unsupported": "RESET is a menu key on the hardware panel and can't be pressed over the network.",
+    "memory_not_number": "User memory must be a number from 0 to 999"
   },
   "cli": {
-    "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (BKG, 1-4, Still 1, Still 2, Black or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state",
+    "usage": "Usage: python se650_control.py [--lang en|ko] <IP> <command> [args]\n  pgm <src> | pvw <src>        select source (BKG, 1-4, Still 1, Still 2, Black or number)\n  auto | cut                   M/E transition\n  dskauto | dskcut             DSK transition\n  ftb                          fade to black\n  type mix|wipe                transition type\n  dur <frames> [me|dsk|ftb]    transition duration\n  key1|pip|dsk1 pgm|pvw        keyer buttons\n  hdmi PGM|PVW|PGM+DSK|PVW+DSK|MultiView\n  audio Follow|\"In 1\"-\"In 4\"   amode Off|Digital|Analog\n  load <n> | save <n>          user memory\n  menu MENU|UP|DOWN|LEFT|RIGHT|ENTER\n  status                       print current state\n  options: --lang en|ko, --allow-undocumented (menu), --confirm-boot-slot (save 0)",
     "status": "PGM: {pgm} | PVW: {pvw} | {keyers} | Input names: {names}",
     "no_state": "[warn] No state reply for {seconds} s",
-    "undocumented_warning": "[warn] 'menu' uses a command that is not in the SE-650 protocol document."
+    "error": "Not sent: {error}",
+    "needs_state": "This command depends on the switcher's current state, which was not received. Not sent."
   }
 }

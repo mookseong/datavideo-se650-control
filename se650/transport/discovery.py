@@ -25,7 +25,9 @@ class DiscoveryError(LocalizedError, ConnectionError):
 def parse_discovery_reply(reply: bytes, allowed_ports=REALTIME_PORTS) -> int:
     if len(reply) != _REPLY.size:
         raise DiscoveryError("transport.error.discovery_reply_length", reply=reply.hex())
-    _, port, tag = _REPLY.unpack(reply)
+    size, port, tag = _REPLY.unpack(reply)
+    if size != _REPLY.size:
+        raise DiscoveryError("transport.error.discovery_reply_length", reply=reply.hex())
     if tag != _OK_TAG:
         raise DiscoveryError("transport.error.discovery_error_reply", reply=reply[4:].hex())
     if port == _NO_FREE_PORT:

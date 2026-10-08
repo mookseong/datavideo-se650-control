@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from se650 import i18n
-from se650.app.gui.widgets import choice_key
+from se650.app.labels import choice_key
 from se650.i18n.catalog import LOCALES_DIR, flatten, load_all, load_pack
 from se650.i18n.translator import Translator, detect_system_locale, normalize
 from se650.protocol.constants import (AUDIO_MODES, AUDIO_SOURCES, HDMI_OUTPUTS, KEY_SOURCES, SOURCES,

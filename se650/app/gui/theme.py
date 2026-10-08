@@ -75,7 +75,7 @@ def device_button(parent, text="", command=None, size=BUTTON_SIZE, font=FONT_BOL
     button = tk.Button(parent, text=text, command=command, image=image or _blank_image(parent), compound="center",
                        width=width, height=height, font=font, bg=BUTTON_FACE, fg=LAMP_OFF_TEXT,
                        activebackground="#3a3a3a", activeforeground="#ffffff", relief="raised", bd=3,
-                       highlightthickness=2, highlightbackground=BUTTON_RIM)
+                       highlightthickness=2, highlightbackground=BUTTON_RIM, takefocus=0)
     return button
 
 

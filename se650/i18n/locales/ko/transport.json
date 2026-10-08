@@ -4,13 +4,17 @@
     "discovery_error_reply": "스위처가 포트 요청을 거부했습니다: {reply}",
     "no_free_port": "스위처에 빈 연결 채널이 없습니다 (컨트롤 패널 + PC 최대 3대). 다른 앱을 닫고, 방금 연결을 해제했다면 몇 초 기다린 뒤 다시 시도하세요. 계속되면 스위처가 이전 채널을 붙잡고 있는 것이라 재시작이 필요합니다.",
     "unknown_port": "알 수 없는 포트 번호 응답: {port}",
-    "not_connected": "연결되어 있지 않습니다"
+    "not_connected": "연결되어 있지 않습니다",
+    "cancelled": "연결을 취소했습니다"
   },
   "log": {
     "ports": "실시간 포트 {realtime} / 명령 포트 {command}",
     "connected": "연결됨: {host}",
     "lost": "연결이 끊어졌습니다",
     "channel_ended": "{channel} 채널 수신 종료",
-    "closed_with_stats": "연결 종료 (명령 채널에서 받은 예상 밖 null 패킷: {nulls_received})"
+    "closed_with_stats": "연결 종료 (명령 채널에서 받은 예상 밖 null 패킷: {nulls_received})",
+    "silent": "{channel} 채널에서 3초 동안 스위처 패킷이 없습니다 - 연결이 끊긴 것으로 처리합니다",
+    "bad_frame": "{channel} 채널에서 깨진 패킷을 받았습니다 ({error}) - 연결을 닫습니다",
+    "handler_error": "{channel} 패킷 처리 중 예상치 못한 오류 - 연결을 닫습니다"
   }
 }

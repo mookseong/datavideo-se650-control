@@ -1,5 +1,6 @@
 {
   "error": {
-    "unknown_choice": "Unknown value: {value} (valid: {choices})"
+    "unknown_choice": "Unknown value: {value} (valid: {choices})",
+    "out_of_range": "{name} {value} is outside the allowed range {low}-{high}"
   }
 }

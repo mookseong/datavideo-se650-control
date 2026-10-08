@@ -4,8 +4,9 @@ import threading
 import time
 import unittest
 
-from se650.transport import (DiscoveryError, DvipConnection, FrameDecoder, NotConnectedError, encode_frame,
-                             request_realtime_port)
+from se650.transport import (ConnectCancelledError, DiscoveryError, DvipConnection, FrameDecoder,
+                             NotConnectedError, encode_frame, request_realtime_port)
+from se650.transport.framing import FramingError
 from se650.transport.discovery import parse_discovery_reply
 
 from .helpers import DeviceFixture, wait_for
@@ -26,14 +27,15 @@ class FramingTests(unittest.TestCase):
         self.assertEqual(decoder.feed(data[3:9]), [])
         self.assertEqual(decoder.feed(data[9:]), [b"0123456789"])
 
-    def test_invalid_length_resets_stream(self):
-        decoder = FrameDecoder()
-        self.assertEqual(decoder.feed(struct.pack("<I", 2) + b"zz"), [])
-        self.assertEqual(decoder.feed(encode_frame(b"OK!!")), [b"OK!!"])
+    def test_invalid_length_is_fatal(self):
+        """조용히 버리면 장비 패킷이 답장 없이 사라져 실시간 채널이 멈춘다 -> 오류로 연결을 끊게 한다."""
+        for bad in (struct.pack("<I", 2) + b"zz", struct.pack("<I", 0) + b"xxxx", struct.pack("<I", 4) + b"yyyy"):
+            with self.assertRaises(FramingError):
+                FrameDecoder().feed(bad)
 
     def test_oversized_frame_rejected(self):
-        decoder = FrameDecoder(max_frame_size=16)
-        self.assertEqual(decoder.feed(struct.pack("<I", 100) + b"x" * 96), [])
+        with self.assertRaises(FramingError):
+            FrameDecoder(max_frame_size=16).feed(struct.pack("<I", 100) + b"x" * 96)
 
 
 class DiscoveryReplyTests(unittest.TestCase):
@@ -61,6 +63,19 @@ class DiscoveryReplyTests(unittest.TestCase):
             parse_discovery_reply(b"\x08\x00")
 
 
+class FailingSendSocket:
+    """실제 소켓을 감싸 sendall 만 실패시킨다 (socket 메서드는 직접 바꿀 수 없다)."""
+
+    def __init__(self, sock):
+        self._sock = sock
+
+    def sendall(self, data):
+        raise OSError("send failed")
+
+    def __getattr__(self, name):
+        return getattr(self._sock, name)
+
+
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
         self.fx = DeviceFixture()
@@ -85,7 +100,8 @@ class ConnectionTests(unittest.TestCase):
                          (self.fx.realtime_port, self.fx.realtime_port + 1))
 
     def test_fixed_port_skips_discovery(self):
-        conn = DvipConnection("127.0.0.1", realtime_port=self.fx.realtime_port, discovery_port=1)
+        conn = DvipConnection("127.0.0.1", realtime_port=self.fx.realtime_port, discovery_port=1,
+                              allowed_ports=(self.fx.realtime_port,))
         try:
             conn.open(self.realtime.append, self.command.append, self.closed.set)
             self.assertTrue(conn.connected)
@@ -170,6 +186,94 @@ class ConnectionTests(unittest.TestCase):
         self.conn.close()
         time.sleep(0.2)
         self.assertFalse(self.closed.is_set())
+
+    # ---------------------------------------------------------------- 장애 처리 (검토 4, 9, 13번)
+    def test_close_during_open_leaves_no_connection(self):
+        conn = self.fx.connection()
+        original = conn._connect
+
+        def connect_then_user_closes(port, timeout):
+            sock = original(port, timeout)
+            conn.close()                                   # 연결하는 도중에 사용자가 해제
+            return sock
+        conn._connect = connect_then_user_closes
+        with self.assertRaises(ConnectCancelledError):
+            conn.open(lambda p: None, lambda p: None, lambda: None)
+        self.assertFalse(conn.connected)
+        self.assertTrue(wait_for(lambda: self.fx.device.open_sessions == 0))
+
+    def test_handler_exception_closes_connection(self):
+        """수신 스레드가 조용히 죽으면 장비가 답장을 영원히 기다린다 -> 연결을 끝내고 알린다."""
+        def broken(payload):
+            raise RuntimeError("boom")
+        with self.assertLogs("se650.transport", "ERROR"):
+            self.conn.open(broken, self.command.append, self.closed.set)
+            self.assertTrue(self.closed.wait(2))
+        self.assertFalse(self.conn.connected)
+        self.assertTrue(wait_for(lambda: self.fx.device.open_sessions == 0))
+
+    def test_corrupted_frame_closes_connection(self):
+        self.open()
+        wait_for(lambda: self.realtime)
+        with self.assertLogs("se650.transport", "ERROR"):
+            self.fx.device.send_corrupt_frame = True
+            self.assertTrue(self.closed.wait(2))
+
+    def test_silent_device_detected_as_lost(self):
+        conn = self.fx.connection(silence_limit=0.4)
+        conn.open(self.realtime.append, self.command.append, self.closed.set)
+        try:
+            wait_for(lambda: self.realtime)
+            with self.assertLogs("se650.transport", "WARNING"):
+                self.fx.device.frozen = True
+                self.assertTrue(self.closed.wait(2))
+            self.assertFalse(conn.connected)
+        finally:
+            conn.close()
+
+    def test_realtime_reply_send_failure_closes_immediately(self):
+        """답장을 못 보내면 장비가 기다린다 -> 실패를 삼키지 않고 바로 연결을 끝낸다 (검토2 6번)."""
+        self.open()
+        wait_for(lambda: self.realtime)
+
+        self.conn._realtime._sock = FailingSendSocket(self.conn._realtime._sock)
+        self.assertTrue(self.closed.wait(1.0))
+        self.assertFalse(self.conn.connected)
+
+    def test_command_send_failure_closes_connection(self):
+        self.open()
+
+        self.conn._command._sock = FailingSendSocket(self.conn._command._sock)
+        with self.assertRaises(OSError):
+            self.conn.send_command(struct.pack("<I", 1) + struct.pack("<HHi", 87, 2, 3))
+        self.assertTrue(self.closed.wait(1.0))
+
+    def test_idle_command_channel_is_not_a_failure(self):
+        conn = self.fx.connection(send_timeout=0.2)            # 명령 채널 수신 제한 0.2초
+        conn.open(self.realtime.append, self.command.append, self.closed.set)
+        try:
+            time.sleep(0.8)                                     # 명령 채널은 그동안 조용함
+            self.assertTrue(conn.connected)
+            self.assertFalse(self.closed.is_set())
+        finally:
+            conn.close()
+
+    def test_close_before_open_prevents_connection(self):
+        """연결 객체는 1회용: open() 전에 close() 가 와도 연결하지 않는다 (검토2 7번)."""
+        conn = self.fx.connection()
+        conn.close()
+        with self.assertRaises(ConnectCancelledError):
+            conn.open(lambda p: None, lambda p: None, lambda: None)
+        time.sleep(0.2)
+        self.assertEqual(self.fx.device.realtime_connections, 0)
+
+    def test_even_port_rejected(self):
+        with self.assertRaises(DiscoveryError):
+            DvipConnection("127.0.0.1", realtime_port=5004)          # 명령 포트에 실시간 프로토콜 금지 (2.1.2)
+
+    def test_discovery_reply_size_field_checked(self):
+        with self.assertRaises(DiscoveryError):
+            parse_discovery_reply(struct.pack("<IHH", 12, 5003, 0xAA55))
 
     def test_discovery_failure_propagates(self):
         self.fx.device.discovery_reply = struct.pack("<IHH", 8, 0xFFFF, 0xAA55)

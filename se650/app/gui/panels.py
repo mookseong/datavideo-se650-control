@@ -7,26 +7,29 @@ import tkinter as tk
 from tkinter import ttk
 
 from ...i18n import available_languages, get_locale, tr
-from ...protocol.constants import AUDIO_MODES, AUDIO_SOURCES, HDMI_OUTPUTS, KEY_SOURCES, TransitionStatus
+from ...protocol.constants import (AUDIO_MODES, AUDIO_SOURCES, BOOT_MEMORY_SLOT, HDMI_OUTPUTS, KEY_SOURCES,
+                                   TransitionStatus)
 
 _DEVICE_CHOICES = (("hdmi", "hdmi_out", HDMI_OUTPUTS), ("audio", "audio_source", AUDIO_SOURCES),
                    ("audio_mode", "audio_mode", AUDIO_MODES))
 from . import theme
-from .widgets import ChoiceBox, translated_options
+from ..labels import translated_options
+from .widgets import ChoiceBox
 
 
 class ConnectionBar(ttk.Frame):
     STATUS_COLORS = {"disconnected": theme.MUTED, "connecting": theme.STATUS_BUSY, "connected": theme.STATUS_OK,
                      "failed": theme.STATUS_ERROR, "lost": theme.STATUS_ERROR}
 
-    def __init__(self, parent, settings, on_connect, on_refresh, on_language):
+    def __init__(self, parent, settings, on_connect, on_refresh, on_language, on_submit=None):
+        """on_connect: 연결/해제 버튼, on_submit: IP 칸 Enter (연결만, 해제하지 않음)"""
         super().__init__(parent, padding=10)
         self._settings = settings
         ttk.Label(self, text=tr("app.connection.ip_label")).grid(row=0, column=0, padx=(0, 6))
         self.ip_var = tk.StringVar(value=settings["ip"])
         entry = ttk.Entry(self, textvariable=self.ip_var, width=18, font=theme.FONT_MONO)
         entry.grid(row=0, column=1)
-        entry.bind("<Return>", lambda _e: on_connect())
+        entry.bind("<Return>", lambda _e: (on_submit or on_connect)())
         self.connect_button = ttk.Button(self, command=on_connect)
         self.connect_button.grid(row=0, column=2, padx=6)
         self.status_var = tk.StringVar()
@@ -48,9 +51,9 @@ class ConnectionBar(ttk.Frame):
     def show(self, status: str, host: str = None):
         self.status_var.set(tr("app.status." + status, host=host))
         self._status_label.configure(fg=self.STATUS_COLORS[status])
-        button_key = "app.connection.disconnect" if status == "connected" else "app.connection.connect"
-        self.connect_button.configure(text=tr(button_key),
-                                      state="disabled" if status == "connecting" else "normal")
+        button_key = {"connected": "app.connection.disconnect",
+                      "connecting": "app.connection.cancel"}.get(status, "app.connection.connect")
+        self.connect_button.configure(text=tr(button_key), state="normal")      # 연결 중에는 취소 버튼
 
     def _save_auto_connect(self):
         self._settings.set("auto_connect", bool(self.auto_connect_var.get()))
@@ -62,9 +65,11 @@ class ExtrasPanel(ttk.Labelframe):
     KEYER_SOURCES = (("key1", "app.extras.keyer_source"), ("pip", "app.extras.pip_source"),
                      ("dsk1", "app.extras.logo_source"))
 
-    def __init__(self, parent, run, settings, log, on_undocumented_toggle=None):
+    def __init__(self, parent, run, settings, log, on_undocumented_toggle=None, confirm=None):
+        """confirm(title, message) -> bool : 위험한 작업 확인 대화상자 (테스트에서 바꿔 끼움)"""
         super().__init__(parent, text=tr("app.extras.title"), padding=8)
         self._run = run
+        self._confirm = confirm or _ask_yes_no
         self._settings = settings
         self._log = log
         self._on_undocumented_toggle = on_undocumented_toggle or (lambda allowed: None)
@@ -146,9 +151,19 @@ class ExtrasPanel(ttk.Labelframe):
         self._on_undocumented_toggle(allowed)
 
     def _memory(self, method_name):
-        number = int(self.memory_var.get())
-        self._settings.set("user_memory", number)
-        self._run(lambda sw: getattr(sw, method_name)(number))
+        try:
+            number = int(self.memory_var.get())
+        except (ValueError, tk.TclError):
+            self._log(tr("app.message.memory_not_number"))
+            return
+        if method_name == "store_memory" and number == BOOT_MEMORY_SLOT:
+            if not self._confirm(tr("app.extras.boot_slot_title"), tr("app.extras.boot_slot_confirm")):
+                return
+            self._run(lambda sw: sw.store_memory(number, confirm_boot_slot=True))
+        else:
+            self._run(lambda sw: getattr(sw, method_name)(number))
+        if 0 <= number <= 999:
+            self._settings.set("user_memory", number)
 
     def refresh(self, switcher):
         state = switcher.state if switcher else None
@@ -163,3 +178,8 @@ class ExtrasPanel(ttk.Labelframe):
             value = getattr(state, state_field)
             if value in names_by_value:
                 getattr(self, attribute).value = names_by_value[value]
+
+
+def _ask_yes_no(title, message) -> bool:
+    from tkinter import messagebox
+    return messagebox.askyesno(title, message, icon="warning", default="no")

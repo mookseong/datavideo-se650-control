@@ -9,6 +9,7 @@ from tkinter import scrolledtext
 from ... import open_switcher
 from ...i18n import available_languages, set_locale, tr
 from ...protocol.constants import SOURCE_NAMES
+from ...transport import ConnectCancelledError
 from ..settings import Settings
 from . import theme
 from .device_panel import DevicePanel
@@ -20,6 +21,8 @@ POLL_INTERVAL_MS = 50
 READY_TIMEOUT = 3.0
 RECONNECT_DELAY = 1.5          # 해제 직후 재연결 전 대기: 스위처가 이전 채널을 정리할 시간
 SHORTCUT_IGNORED_WIDGETS = {"Entry", "TEntry", "TSpinbox", "Spinbox", "Text", "TCombobox"}
+NO_FOCUS_WIDGETS = {"Button", "TButton", "Checkbutton", "TCheckbutton"}   # Space 가 버튼과 단축키를 둘 다 누르지 않게
+KEY_RELEASE_GRACE_MS = 40      # 자동 반복은 '놓기+누르기' 쌍으로 온다 (X11). 이 안에 다시 눌리면 반복으로 본다
 SHORTCUTS = {
     "Return": lambda sw: sw.auto(),
     "space": lambda sw: sw.cut(),
@@ -56,6 +59,7 @@ class MainWindow:
         self._status = ("disconnected", None)
         self._last_disconnect = float("-inf")
         self._pending_connect = None
+        self._connect_in_progress = False      # 연결은 한 번에 하나만 (중복 연결 = 장비 채널 누수)
 
         set_locale(language or self.settings["language"])     # "" = 시스템 언어
         root.resizable(False, False)
@@ -64,7 +68,11 @@ class MainWindow:
         self._log_handler = _QueueLogHandler(self._events)
         self._attach_logging()
 
-        root.bind("<Key>", self._on_key)
+        self._held_keys = set()
+        self._release_jobs = {}
+        root.bind("<KeyPress>", self._on_key)
+        root.bind("<KeyRelease>", self._on_key_release)
+        root.bind("<FocusOut>", self._forget_held_keys)      # 누른 채 다른 창으로 가면 놓기 이벤트가 오지 않는다
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._restore_geometry()
         self.log(tr("app.message.hint"))
@@ -77,7 +85,7 @@ class MainWindow:
     def _build(self):
         self.root.title(tr("app.window_title"))
         self.connection_bar = ConnectionBar(self.root, self.settings, self.toggle_connection,
-                                            self.refresh_from_device, self.change_language)
+                                            self.refresh_from_device, self.change_language, self.connect)
         self.connection_bar.grid(row=0, column=0, sticky="ew")
         self.device = DevicePanel(self.root, self.run, self.log)
         self.device.grid(row=1, column=0, sticky="ew", padx=10)
@@ -88,6 +96,14 @@ class MainWindow:
                                                  font=theme.FONT_LOG, state="disabled", relief="flat")
         self.log_box.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 10))
         self._panels = (self.device, self.extras)
+        self._disable_button_focus(self.root)
+
+    def _disable_button_focus(self, widget):
+        """버튼이 키보드 포커스를 가져가면 Space 가 그 버튼(예: 메모리 저장)과 CUT 단축키를 함께 누른다."""
+        if widget.winfo_class() in NO_FOCUS_WIDGETS:
+            widget.configure(takefocus=0)
+        for child in widget.winfo_children():
+            self._disable_button_focus(child)
 
     def _rebuild(self):
         """언어 변경: 위젯을 새 언어로 다시 만든다. 연결/로그/상태는 유지."""
@@ -118,17 +134,25 @@ class MainWindow:
         log.info(message)
 
     def toggle_connection(self):
+        """연결 / 해제 / (연결 중이면) 취소."""
+        if self._connect_in_progress:
+            self.disconnect()              # 취소: 대기 중 재연결 취소 + 진행 중인 연결 정리
+            return
         if self.switcher and self.switcher.connected:
             self.disconnect()
         else:
             self.connect()
 
     def connect(self):
+        """이미 연결됐거나 연결 중이면 아무것도 하지 않는다 (Enter 연타, 버튼 연타 방지)."""
+        if self._connect_in_progress or (self.switcher and self.switcher.connected):
+            return
         host = self.connection_bar.ip
         if not host:
             self.log(tr("app.message.enter_ip"))
             return
         self.settings.set("ip", host)
+        self._connect_in_progress = True
         self._show_status("connecting")
         wait = RECONNECT_DELAY - (time.monotonic() - self._last_disconnect)
         if wait > 0:
@@ -139,14 +163,24 @@ class MainWindow:
     def _start_connect(self, host):
         self._pending_connect = None
         # 접속 도중 도착하는 상태 콜백도 처리되도록 connect() 전에 self.switcher 를 할당한다
-        switcher = self._switcher_factory(host, on_change=lambda: self._events.put(("state", None)))
+        try:
+            switcher = self._switcher_factory(host, on_change=lambda: self._events.put(("state", None)))
+        except Exception as error:      # noqa: BLE001 - 잘못된 포트 등: 연결 버튼이 영구히 막히지 않게
+            self._connect_in_progress = False
+            self.log(tr("app.message.connect_failed", error=error))
+            self._show_status("failed")
+            return
         switcher.allow_undocumented = self.settings["undocumented_menu"]
         self.switcher = switcher
         threading.Thread(target=self._connect_worker, args=(switcher,), name="connect", daemon=True).start()
 
     def disconnect(self):
+        if self._pending_connect:
+            self.root.after_cancel(self._pending_connect)
+            self._pending_connect = None
+        self._connect_in_progress = False
         if self.switcher:
-            self.switcher.close()
+            self.switcher.close()          # 연결 중이어도 닫는다 (전송 계층이 진행 중인 open 도 정리)
             self._last_disconnect = time.monotonic()
         self.switcher = None
         self._show_status("disconnected")
@@ -193,6 +227,8 @@ class MainWindow:
     def _connect_worker(self, switcher):
         try:
             switcher.connect()
+        except ConnectCancelledError:
+            return                          # 사용자가 연결 중에 해제함 (소켓은 이미 정리됨)
         except Exception as error:      # noqa: BLE001
             self.log(tr("app.message.connect_failed", error=error))
             self._events.put(("failed", switcher))
@@ -219,11 +255,17 @@ class MainWindow:
             self._append_log(payload)
         elif kind == "state":
             self._refresh_panels()
-        elif kind == "connected" and payload is self.switcher:
+        elif kind == "connected":
+            if payload is not self.switcher:
+                payload.close()            # 해제되거나 교체된 연결이 늦게 완료됨 -> 즉시 반납
+                return
+            self._connect_in_progress = False
             self._show_status("connected", payload.host)
             self._refresh_panels()
         elif kind == "failed" and payload is self.switcher:
+            self._connect_in_progress = False
             self.switcher = None
+            self._last_disconnect = time.monotonic()
             self._show_status("failed")
 
     def _refresh_panels(self):
@@ -231,6 +273,7 @@ class MainWindow:
             panel.refresh(self.switcher)
         if self.switcher and not self.switcher.connected and self._status[0] == "connected":
             self._last_disconnect = time.monotonic()
+            self.switcher.close()          # 끊긴 연결의 남은 채널도 확실히 정리
             self._show_status("lost")
 
     def _show_status(self, status, host=None):
@@ -256,13 +299,39 @@ class MainWindow:
                 pass
 
     def _on_key(self, event):
+        """단축키. 키를 누르고 있을 때의 자동 반복은 무시한다 (한 번 누름 = 한 번 실행)."""
+        key = event.keysym
+        job = self._release_jobs.pop(key, None)
+        if job is not None:                       # 방금 '놓기'가 온 키가 바로 다시 눌림 = 자동 반복 (X11)
+            self.root.after_cancel(job)
+            return
+        if key in self._held_keys:                # 놓기 없이 반복 (Windows)
+            return
+        self._held_keys.add(key)
         if self.switcher is None or not self.switcher.connected:
             return
         if event.widget.winfo_class() in SHORTCUT_IGNORED_WIDGETS:
             return
-        action = SHORTCUTS.get(event.keysym)
+        action = SHORTCUTS.get(key)
         if action:
             self.run(action)
+
+    def _forget_held_keys(self, _event=None):
+        for job in self._release_jobs.values():
+            self.root.after_cancel(job)
+        self._release_jobs.clear()
+        self._held_keys.clear()
+
+    def _on_key_release(self, event):
+        key = event.keysym
+
+        def released():
+            self._release_jobs.pop(key, None)
+            self._held_keys.discard(key)
+        old = self._release_jobs.pop(key, None)
+        if old is not None:
+            self.root.after_cancel(old)
+        self._release_jobs[key] = self.root.after(KEY_RELEASE_GRACE_MS, released)
 
 
 def run_gui(language: str = None):
