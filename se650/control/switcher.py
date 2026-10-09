@@ -131,9 +131,13 @@ class Switcher:
         """Switcher 와 연결 객체는 한 번만 쓴다. close() 뒤 재연결은 새 객체로 (닫힌 객체는 열리지 않는다)."""
         self._connection.open(self._on_realtime_packet, self._on_command_packet, self._on_closed,
                               realtime_reply=self._next_realtime_reply)
-        self.request_input_names()
-        threading.Thread(target=self._sync_initial_state, name="initial-state", daemon=True).start()
-        threading.Thread(target=self._watch_pending, name="ready-watch", daemon=True).start()
+        try:
+            self.request_input_names()
+            threading.Thread(target=self._sync_initial_state, name="initial-state", daemon=True).start()
+            threading.Thread(target=self._watch_pending, name="ready-watch", daemon=True).start()
+        except BaseException:
+            self.close()                # 열린 뒤 실패해도 장비 채널을 붙잡고 있지 않는다
+            raise
 
     def close(self):
         self._stopped.set()

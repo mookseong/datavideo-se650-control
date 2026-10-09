@@ -288,6 +288,23 @@ class GuiTests(unittest.TestCase):
         self.window._switcher_factory = good
         self.connect()
 
+    def test_failed_connect_is_closed(self):
+        """실패 보고된 연결도 반드시 close() 한다 (일부 소켓이 남아 있어도 장비에 남지 않게)."""
+        closed = []
+        good = self.fx.factory()
+
+        def tracking(host, on_change=None):
+            switcher = good(host, on_change)
+            original = switcher.close
+            switcher.close = lambda: (closed.append(switcher), original())
+            switcher.connect = lambda: (_ for _ in ()).throw(OSError("refused"))
+            return switcher
+        self.window._switcher_factory = tracking
+        self.window.connect()
+        self.assertTrue(self.pump_until(lambda: self.window._status[0] == "failed"))
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(self.fx.device.open_sessions, 0)
+
     def test_focus_loss_forgets_held_keys(self):
         """키를 누른 채 다른 창으로 가면 놓기가 오지 않는다 -> 그 단축키가 영구히 막히면 안 된다 (검토2 9번)."""
         self.connect()

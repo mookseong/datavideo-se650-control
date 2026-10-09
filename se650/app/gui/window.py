@@ -262,7 +262,10 @@ class MainWindow:
             self._connect_in_progress = False
             self._show_status("connected", payload.host)
             self._refresh_panels()
-        elif kind == "failed" and payload is self.switcher:
+        elif kind == "failed":
+            payload.close()                # 실패한 연결이 소켓을 하나라도 쥐고 있지 않게 (중복 호출 안전)
+            if payload is not self.switcher:
+                return
             self._connect_in_progress = False
             self.switcher = None
             self._last_disconnect = time.monotonic()

@@ -319,6 +319,16 @@ class SwitcherIntegrationTests(unittest.TestCase):
         self.switcher.connect()
         self.assertTrue(self.switcher.wait_ready(3.0), "접속 후 상태 미수신")
 
+    def test_failure_right_after_open_releases_device_channel(self):
+        """연결은 됐는데 직후 단계(스레드 시작 등)가 실패해도 장비 채널을 붙잡고 있으면 안 된다."""
+        def broken():
+            raise RuntimeError("can't start new thread")
+        self.switcher.request_input_names = broken
+        with self.assertRaises(RuntimeError):
+            self.switcher.connect()
+        self.assertTrue(wait_for(lambda: self.fx.device.open_sessions == 0, 2))
+        self.assertFalse(self.switcher.connected)
+
     def test_state_from_first_realtime_packet(self):
         self.fx.device.push_on_connect = True
         self.fx.device.ignore_gets = 99

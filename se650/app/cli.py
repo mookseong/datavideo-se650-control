@@ -69,11 +69,11 @@ def run_cli(argv, switcher_factory=open_switcher, out=print) -> int:
 
     switcher = switcher_factory(host)
     try:
-        switcher.connect()
-    except Exception as error:      # noqa: BLE001 - 연결 실패는 메시지로
-        out(tr("app.cli.error", error=error))
-        return 2
-    try:
+        try:
+            switcher.connect()
+        except Exception as error:      # noqa: BLE001 - 연결 실패는 메시지로 (finally 에서 반드시 닫는다)
+            out(tr("app.cli.error", error=error))
+            return 2
         if not switcher.wait_ready(READY_TIMEOUT):
             out(tr("app.cli.no_state", seconds=int(READY_TIMEOUT)))
             if name in STATE_DEPENDENT:
