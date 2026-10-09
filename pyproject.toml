@@ -8,12 +8,18 @@ version = "0.1.0"
 description = "Datavideo SE-650 video switcher control over Ethernet (DVIP) - GUI and CLI"
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "mookseong"}]
 dependencies = []
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Topic :: Multimedia :: Video",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mookseong/datavideo-se650-control"
 
 [project.scripts]
 se650 = "se650.app.main:main"
